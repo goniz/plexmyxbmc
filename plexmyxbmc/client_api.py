@@ -59,7 +59,7 @@ class ThreadedAPIServer(ThreadingMixIn, HTTPServer):
             "X-Plex-Platform": "Linux",
             "X-Plex-Model": "PlexCast",
             "X-Plex-Device": "PC",
-            }
+        }
 
         if not self.config.get('plex_username') is None:
             self._plex_headers["X-Plex-Username"] = self.config['plex_username']
@@ -79,6 +79,7 @@ class ThreadedAPIServer(ThreadingMixIn, HTTPServer):
                 "deviceClass": "pc"
             }
         }
+        self.plex.xbmc.notify('Plex', 'Detected Remote Control')
         resp = dict2xml_withheader(resp, root_node='MediaContainer')
         return dict(data=resp, headers=self._plex_headers, code=200)
 

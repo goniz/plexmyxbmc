@@ -194,3 +194,7 @@ class XBMC(object):
         )
         value = steps[plex_value]
         self._rpc.execute(value, dict())
+
+    def notify(self, title, msg, duration=5000):
+        args = dict(title=title, message=msg, displaytime=duration)
+        self._rpc.execute('GUI.ShowNotification', args)

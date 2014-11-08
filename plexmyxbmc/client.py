@@ -20,8 +20,11 @@ class PlexClient(object):
             self.config['xbmc_username'], self.config['xbmc_password']
         )
         self._xbmc = XBMC(self._xbmc_rpc)
+        self.xbmc.notify('Plex', 'PlexMyXBMC Connected')
         self._user = MyPlexUser(self.config['plex_username'], self.config['plex_password'])
+        self.xbmc.notify('Plex', 'Logged in as "%s"' % self.config['plex_username'])
         self._server = self.get_coolest_server()
+        self.xbmc.notify('Plex', 'using PMS %s' % self._server.friendlyName)
         self.httpd = ThreadedAPIServer(('', self.config['port']), PlexClientHandler)
         self.httpd.allow_reuse_address = True
         self.httpd.plex = self
