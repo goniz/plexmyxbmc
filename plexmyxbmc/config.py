@@ -40,6 +40,7 @@ class Configuration(dict):
         if config.get('xbmc_port') is None:
             config['xbmc_port'] = 8080
         if not 'plex_username' in config or not 'plex_password' in config:
+            self.commit()
             raise ConfigurationError('missing plex_username or plex_password')
 
         super(Configuration, self).__init__(config)
