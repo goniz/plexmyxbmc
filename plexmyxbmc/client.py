@@ -12,9 +12,13 @@ from plexmyxbmc.client_api import ThreadedAPIServer, PlexClientHandler
 class PlexClient(object):
     def __init__(self):
         self.config = Configuration(default_system_config_path())
+        self.config.verify()
         self.c_info = ClientInfo.from_config(self.config)
         self.registration_thread = ClientRegistration(self.c_info)
-        self._xbmc_rpc = XbmcRPC(self.config['xbmc_host'], self.config['xbmc_port'])
+        self._xbmc_rpc = XbmcRPC(
+            self.config['xbmc_host'], self.config['xbmc_port'],
+            self.config['xbmc_username'], self.config['xbmc_password']
+        )
         self._xbmc = XBMC(self._xbmc_rpc)
         self._user = MyPlexUser(self.config['plex_username'], self.config['plex_password'])
         self._server = self.get_coolest_server()

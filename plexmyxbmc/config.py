@@ -29,20 +29,6 @@ class Configuration(dict):
         else:
             config = dict()
 
-        if config.get('uuid') is None:
-            config['uuid'] = str(uuid.uuid4())
-        if config.get('port') is None:
-            config['port'] = 9999
-        if config.get('name') is None:
-            config['name'] = 'PlexCast for XBMC'
-        if config.get('xbmc_host') is None:
-            config['xbmc_host'] = 'localhost'
-        if config.get('xbmc_port') is None:
-            config['xbmc_port'] = 8080
-        if not 'plex_username' in config or not 'plex_password' in config:
-            self.commit()
-            raise ConfigurationError('missing plex_username or plex_password')
-
         super(Configuration, self).__init__(config)
         self.commit()
 
@@ -52,7 +38,26 @@ class Configuration(dict):
         json.dump(self, fp)
         fp.close()
         self.lock.release()
-        print('config commited to disk')
+
+    def verify(self):
+        if self.get('uuid') is None:
+            self['uuid'] = str(uuid.uuid4())
+        if self.get('port') is None:
+            self['port'] = 9999
+        if self.get('name') is None:
+            self['name'] = 'PlexMyXBMC'
+        if self.get('xbmc_host') is None:
+            self['xbmc_host'] = 'localhost'
+        if self.get('xbmc_port') is None:
+            self['xbmc_port'] = 8080
+        if self.get('xbmc_username') is None:
+            self['xbmc_username'] = 'xbmc'
+        if self.get('xbmc_password') is None:
+            self['xbmc_password'] = 'xbmc'
+        if not 'plex_username' in self or not 'plex_password' in self:
+            self.commit()
+            raise ConfigurationError('missing plex_username or plex_password')
+        self.commit()
 
 
 def default_system_config_path():
