@@ -73,7 +73,7 @@ class ThreadedAPIServer(ThreadingMixIn, HTTPServer):
                 "protocolVersion": "1",
                 "protocolCapabilities": "navigation,playback,timeline",
                 "machineIdentifier": self.config['uuid'],
-                "product": "PlexCast",
+                "product": "PlexMyXBMC",
                 "platform": "Linux",
                 "platformVersion": plexmyxbmc.__version__,
                 "deviceClass": "pc"

@@ -23,14 +23,24 @@ Configuration:
 
 CLI Usage:
 
-	* run as your user or a dedicated user
-    * no root needed
+	run as your user or a dedicated user
+    no root needed
     
-	./plexmyxbmc.py --foreground
+	./plexmyxbmc.py
 	
-	or
-	
-	./plexmyxbmc.py --daemon
+As Service:
+
+    Customize and use the appropriate init script
+    * initscripts/plexmyxbmc.initd   --> /etc/init.d/plexmyxbmc
+        sudo cp initscripts/plexmyxbmc.initd /etc/init.d/plexmyxbmc
+        sudo chmod +x /etc/init.d/plexmyxbmc
+        sudo update-rc.d plexmyxbmc defaults
+        sudo service plexmyxbmc start
+    * initscripts/plexmyxbmc.service --> /usr/lib/systemd/system/plexmyxbmc.service
+        sudo cp initscripts/plexmyxbmc.service /usr/lib/systemd/system/plexmyxbmc.service
+        sudo systemctl daemon-reload
+        sudo systemctl enable plexmyxbmc
+        sudo systemctl start plexmyxbmc
 
 API Usage:
 	

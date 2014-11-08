@@ -1,0 +1,59 @@
+#!/bin/bash
+### BEGIN INIT INFO
+# Provides:          plexmyxbmc
+# Required-Start:    $networking
+# Required-Stop:     
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: Plex My XBMC
+# Description:       Use XBMC player as Plex client with ease
+# Author:            goniz
+# Version:           1.0
+### END INIT INFO
+
+USER=USER
+PMX=/opt/plexmyxbmc/plexmyxbmc.py
+
+running=`ps ax | grep "plexmyxbmc.py" | awk '{ print $1 }' | wc -l`
+
+case "$1" in
+    start)
+	if [ "$running" -gt 1 ]; then
+		echo "PlexMyXBMC already running..."
+		exit 0
+	fi
+	echo -n "Starting Plex My XBMC: "
+	su -l ${USER} -c "/usr/bin/python2 ${PMX} &" &>/dev/null
+	sleep 1
+	echo "done"
+	;;
+    stop)
+	if [ "$running" -eq 1 ]; then
+		echo "Plex My XBMC is not running (no process found)..."
+		exit 0
+	fi
+	echo -n "Killing Plex My XBMC: "
+	# Trying to kill the Plex My XBMC itself but also the Plug-ins
+	ps ax | grep "plexmyxbmc.py" | awk '{ print $1 }' | xargs kill -9 >/dev/null 2>&1
+	sleep 1
+	echo "done"
+	;;
+    restart)
+	bash $0 stop
+	bash $0 start
+	;;
+    status)
+        if [ "$running" -gt 1 ]; then
+                echo "Plex My XBMC process running."
+	else
+		echo "It seems that Plex My XBMC isn't running (no process found)."
+        fi
+	;;
+    *)
+	echo "Usage: $0 {start|stop|restart|status}"
+	exit 1
+	;;
+esac
+
+exit 0
+
