@@ -2,7 +2,7 @@
 import threading
 import socket
 import time
-import plexcast
+import plexmyxbmc
 
 
 class ClientInfo(object):
@@ -20,7 +20,7 @@ class ClientInfo(object):
             conf['name'],
             conf['port'],
             'PlexCast',
-            plexcast.__version__
+            plexmyxbmc.__version__
         )
 
 

@@ -1,6 +1,6 @@
 __author__ = 'gz'
 
-from plexcast.client import PlexClient
+from plexmyxbmc.client import PlexClient
 
 client = PlexClient()
 client.serve()

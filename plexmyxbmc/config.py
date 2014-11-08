@@ -3,7 +3,7 @@
 import json
 import os
 import uuid
-from plexcast.lock import Lock
+from plexmyxbmc.lock import Lock
 
 
 class ConfigurationError(Exception):
@@ -11,7 +11,7 @@ class ConfigurationError(Exception):
 
 
 class Configuration(dict):
-    LOCK_PATH = '/tmp/.plexcast.lock'
+    LOCK_PATH = '/tmp/.plexmyxbmc.lock'
 
     def __init__(self, path):
         self.path = path
@@ -55,4 +55,4 @@ class Configuration(dict):
 
 
 def default_system_config_path():
-    return os.path.join(os.environ['HOME'], '.plexcast.json')
+    return os.path.join(os.environ['HOME'], '.plexmyxbmc.json')

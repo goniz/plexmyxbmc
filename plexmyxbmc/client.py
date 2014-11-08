@@ -2,11 +2,11 @@
 from threading import Lock
 from plexapi.myplex import MyPlexUser
 
-from plexcast.config import Configuration, default_system_config_path
-from plexcast.registration import ClientRegistration, ClientInfo
-from plexcast.xbmc_rpc import XbmcRPC, XBMC
-from plexcast.discovery import PlexGDM
-from plexcast.client_api import ThreadedAPIServer, PlexClientHandler
+from plexmyxbmc.config import Configuration, default_system_config_path
+from plexmyxbmc.registration import ClientRegistration, ClientInfo
+from plexmyxbmc.xbmc_rpc import XbmcRPC, XBMC
+from plexmyxbmc.discovery import PlexGDM
+from plexmyxbmc.client_api import ThreadedAPIServer, PlexClientHandler
 
 
 class PlexClient(object):

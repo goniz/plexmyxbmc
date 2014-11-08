@@ -1,8 +1,8 @@
 import json
 import urllib2
-import plexcast
+import plexmyxbmc
 from threading import Lock
-from plexcast import millis_to_time
+from plexmyxbmc import millis_to_time
 
 
 class XbmcRPC(object):
@@ -73,8 +73,8 @@ class XBMC(object):
         resp = self._rpc.execute("Player.GetProperties", args)
         properties = dict()
         try:
-            properties['time'] = plexcast.time_to_millis(resp['time'])
-            properties['duration'] = plexcast.time_to_millis(resp['totaltime'])
+            properties['time'] = plexmyxbmc.time_to_millis(resp['time'])
+            properties['duration'] = plexmyxbmc.time_to_millis(resp['totaltime'])
             properties['state'] = 'paused' if resp['speed'] is 0 else 'playing'
             properties['shuffle'] = '0' if resp.get('shuffled', False) is False else '1'
         except Exception:
@@ -93,8 +93,7 @@ class XBMC(object):
         timeline = dict(location=location, type=playertype.plex)
         if playerid > 0:
             prop = self.get_player_properties(playerid)
-            timeline['state'] = prop['state']
-            timeline['time'] = prop['time']
+            timeline.update(prop)
             timeline['controllable'] = "playPause,play,stop,skipPrevious,skipNext,volume,stepBack,stepForward,seekTo"
         else:
             timeline['state'] = 'stopped'
@@ -167,7 +166,10 @@ class XBMC(object):
                 seek_to = millis_to_time(seek_value)
             elif isinstance(seek_value, str):
                 seek_to = seek_value
-            params = dict(playerid=playerid, value=seek_value)
+            else:
+                raise ValueError('expected (int, str), found %s' % type(seek_value))
+            params = dict(playerid=playerid, value=seek_to)
+            print 'Seek params', str(params)
             self._rpc.execute("Player.Seek", params)
 
     def step(self, plex_value):

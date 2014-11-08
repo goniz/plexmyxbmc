@@ -6,9 +6,9 @@ from SocketServer import ThreadingMixIn
 from BaseHTTPServer import HTTPServer, BaseHTTPRequestHandler
 import plexapi.video as video
 
-import plexcast
-from plexcast.xml import dict2xml_withheader
-from plexcast.config import Configuration, default_system_config_path
+import plexmyxbmc
+from plexmyxbmc.xml import dict2xml_withheader
+from plexmyxbmc.config import Configuration, default_system_config_path
 
 # contains the ThreadedAPIServer uri to handler routes
 __ROUTES__ = dict()
@@ -51,7 +51,7 @@ class ThreadedAPIServer(ThreadingMixIn, HTTPServer):
         self._plex_headers = {
             "Content-type": "application/x-www-form-urlencoded",
             "Access-Control-Allow-Origin": "*",
-            "X-Plex-Version": plexcast.__version__,
+            "X-Plex-Version": plexmyxbmc.__version__,
             "X-Plex-Client-Identifier": self.config['uuid'],
             "X-Plex-Provides": "player",
             "X-Plex-Product": "PlexCast",
@@ -75,7 +75,7 @@ class ThreadedAPIServer(ThreadingMixIn, HTTPServer):
                 "machineIdentifier": self.config['uuid'],
                 "product": "PlexCast",
                 "platform": "Linux",
-                "platformVersion": plexcast.__version__,
+                "platformVersion": plexmyxbmc.__version__,
                 "deviceClass": "pc"
             }
         }
