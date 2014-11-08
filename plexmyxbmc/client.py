@@ -32,7 +32,6 @@ class PlexClient(object):
 
     def _serve_loop(self):
         while self._keep_running is True:
-            #print 'Handling http request..'
             self.httpd.handle_request()
 
     def serve(self):
