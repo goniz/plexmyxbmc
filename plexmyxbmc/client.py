@@ -5,7 +5,8 @@ from plexapi.exceptions import NotFound
 
 from plexmyxbmc.config import Configuration, default_system_config_path
 from plexmyxbmc.registration import ClientRegistration, ClientInfo
-from plexmyxbmc.xbmc_rpc import XbmcRPC, XBMC
+from plexmyxbmc.xbmc_rpc import XbmcJSONRPC
+from plexmyxbmc.xbmc import XBMC
 from plexmyxbmc.server import MyPlexServer
 from plexmyxbmc.client_api import ThreadedAPIServer, PlexClientHandler
 from plexmyxbmc.subscription import PlexSubManager
@@ -17,10 +18,7 @@ class PlexClient(object):
         self.config.verify()
         self.c_info = ClientInfo.from_config(self.config)
         self.registration_thread = ClientRegistration(self.c_info)
-        self._xbmc_rpc = XbmcRPC(
-            self.config['xbmc_host'], self.config['xbmc_port'],
-            self.config['xbmc_username'], self.config['xbmc_password']
-        )
+        self._xbmc_rpc = XbmcJSONRPC(self.config['xbmc_host'], self.config['xbmc_port'])
         self._xbmc = XBMC(self._xbmc_rpc)
         self.xbmc.notify('Plex', 'PlexMyXBMC Connected')
         self._user = MyPlexUser(self.config['plex_username'], self.config['plex_password'])
@@ -55,6 +53,7 @@ class PlexClient(object):
     def stop(self):
         self._keep_running = False
         self.registration_thread.stop()
+        self._xbmc_rpc.stop()
 
     def join(self):
         if self.registration_thread.isAlive():

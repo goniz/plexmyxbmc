@@ -1,8 +1,8 @@
 import json
 import urllib2
-import plexmyxbmc
-from threading import Lock
-from plexmyxbmc import millis_to_time
+import socket
+from Queue import Queue
+from threading import Lock, Thread
 
 
 class InvalidRPCConnection(Exception):
@@ -10,20 +10,12 @@ class InvalidRPCConnection(Exception):
 
 
 class XbmcRPC(object):
-    def __init__(self, host, port, username='xbmc', password='xbmc'):
-        self.host = host
-        self.port = port
-        self.username = username
-        self.password = password
-        self.url = 'http://%s:%d/jsonrpc' % (self.host, self.port)
+    def __init__(self):
         self._lock = Lock()
         self._id = 0
-        _auth = '%s:%s' % (self.username, self.password)
-        self._headers = {
-            'Content-Type': 'application/json',
-            'User-Agent': 'PlexCast',
-            'Authorization': _auth.encode('base64').strip()
-        }
+
+    def _execute(self, json_data):
+        raise NotImplementedError()
 
     def execute(self, method, args):
         with self._lock:
@@ -32,14 +24,14 @@ class XbmcRPC(object):
 
         data = json.dumps(params)
         try:
-            req = urllib2.Request(self.url, data, self._headers)
-            resp = urllib2.urlopen(req).read().strip()
+            resp = self._execute(data)
         except Exception as e:
             print str(e)
             return None
 
         if len(resp) > 0:
-            resp = json.loads(resp)
+            if isinstance(resp, (str, unicode)):
+                resp = json.loads(resp)
             if resp.get('result') is None:
                 raise Exception(resp)
             return resp['result']
@@ -52,161 +44,110 @@ class XbmcRPC(object):
         return False
 
 
-class PlayerType(object):
-    def __init__(self, type):
-        self._type = type
+class XbmcJSONRPC(XbmcRPC):
+    def __init__(self, host='localhost', port=9090):
+        super(XbmcJSONRPC, self).__init__()
+        self._host = host
+        self._port = port
+        self._events = dict()
+        self._socket = None
+        self._connect_socket()
+        self._response_queue = Queue()
+        self._keep_running = False
+        self._thread = Thread(target=self._socket_handler_thread)
+        self._thread.start()
 
-    @property
-    def plex(self):
-        if 'audio' == self._type:
-            return 'music'
-        return self._type
+    def __del__(self):
+        self.stop()
+        del self._thread
 
-    @property
-    def xbmc(self):
-        if 'music' == self._type:
-            return 'audio'
-        return self._type
-
-    def __eq__(self, other):
-        if not isinstance(other, PlayerType):
-            return False
-        return self.plex == other.plex
-
-
-class XBMC(object):
-    def __init__(self, rpc):
-        self._rpc = rpc
-        if not self._rpc.verify():
+    def _connect_socket(self):
+        with self._lock:
+            for i in xrange(3):
+                try:
+                    self._socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    self._socket.connect((self._host, self._port))
+                    return
+                except:
+                    continue
             raise InvalidRPCConnection()
 
-    def get_player_properties(self, playerid):
-        args = dict(playerid=int(playerid), properties=["time", "totaltime", "speed", "shuffled"])
-        resp = self._rpc.execute("Player.GetProperties", args)
-        properties = dict()
-        try:
-            properties['time'] = plexmyxbmc.time_to_millis(resp['time'])
-            properties['duration'] = plexmyxbmc.time_to_millis(resp['totaltime'])
-            properties['state'] = 'paused' if resp['speed'] is 0 else 'playing'
-            properties['shuffle'] = '0' if resp.get('shuffled', False) is False else '1'
-        except Exception:
-            properties['time'] = 0
-            properties['duration'] = 0
-            properties['state'] = "stopped"
-            properties['shuffle'] = False
-
-        properties['seekRange'] = '0-%d' % properties['duration']
-        properties['volume'] = self.volume
-        properties['protocol'] = 'http'
-        properties['guid'] = ''
-        return properties
-
-    def get_timeline(self, playerid, playertype, location='navigation'):
-        timeline = dict(location=location, type=playertype.plex)
-        if playerid > 0:
-            prop = self.get_player_properties(playerid)
-            timeline.update(prop)
-            timeline['controllable'] = "playPause,play,stop,skipPrevious,skipNext,volume,stepBack,stepForward,seekTo"
-        else:
-            timeline['state'] = 'stopped'
-            timeline['time'] = 0
-        return timeline
-
-    def get_active_players(self):
-        return self._rpc.execute('Player.GetActivePlayers', tuple())
-
-    def get_players_state(self):
-        state = dict()
-        players = self.get_active_players()
-
-        state['location'] = "navigation"
-        index = 0
-        for mediatype in ('audio', 'photo', 'video'):
-            mediatype = PlayerType(mediatype)
-            player = filter(lambda x: PlayerType(x['type']) == mediatype, players)
-            if player:
-                playerid = int(player[0]['playerid'])
-                state['location'] = 'fullScreen' + mediatype.plex.capitalize()
-            else:
-                playerid = -1
-
-            # hack to generate 'Timeline_', 'Timeline__' or 'Timeline___' to cheat dict2xml
-            key = 'Timeline' + ('_' * index)
-            state[key] = self.get_timeline(playerid, mediatype, location=state['location'])
-            index += 1
-
-        return state
-
-    def play_media(self, url, offset=0):
-        params = dict(
-            item=dict(
-                file=url,
-            ),
-            options=dict(
-                resume=millis_to_time(offset)
-            )
-        )
-        self._rpc.execute('Player.Open', params)
-
     def stop(self):
-        for player in self.get_active_players():
-            playerid = int(player['playerid'])
-            self._rpc.execute('Player.Stop', dict(playerid=playerid))
+        self._keep_running = False
+        # trigger the thread in order to detect the shutdown request
+        self.verify()
+        if self._thread.isAlive():
+            self._thread.join()
 
-    @property
-    def volume(self):
-        args = dict(properties=['volume'])
-        resp = self._rpc.execute('Application.GetProperties', args)
-        return resp.get('volume', 100)
-
-    @volume.setter
-    def volume(self, val):
-        val = int(val)
-        args = dict(volume=val)
-        self._rpc.execute('Application.SetVolume', args)
-
-    def play_pause(self, state):
-        assert isinstance(state, bool) is True, 'Expected Bool, got %s' % type(state)
-        for player in self.get_active_players():
-            playerid = int(player['playerid'])
-            self._rpc.execute('Player.PlayPause', dict(playerid=playerid, play=state))
-
-    def seek(self, seek_value=0):
-        for player in self.get_active_players():
-            playerid = int(player['playerid'])
-            if isinstance(seek_value, int):
-                seek_to = millis_to_time(seek_value)
-            elif isinstance(seek_value, str):
-                seek_to = seek_value
+    def register(self, event, handler):
+        with self._lock:
+            if event in self._events:
+                self._events[event].append(handler)
             else:
-                raise ValueError('expected (int, str), found %s' % type(seek_value))
-            params = dict(playerid=playerid, value=seek_to)
-            print 'Seek params', str(params)
-            self._rpc.execute("Player.Seek", params)
+                self._events[event] = [handler]
 
-    def step(self, plex_value):
-        steps = dict(
-            stepForward='smallforward',
-            stepBack='smallbackward',
-            skipNext='bigforward',
-            skipPrevious='bigbackward'
-        )
-        value = steps[plex_value]
-        self.seek(value)
+    def unregister(self, event, handler):
+        with self._lock:
+            if event in self._events:
+                self._events[event].remove(handler)
 
-    def navigate(self, plex_value):
-        steps = dict(
-            moveUp='Input.Up',
-            moveDown='Input.Down',
-            moveLeft='Input.Left',
-            moveRight='Input.Right',
-            select='Input.Select',
-            home='Input.Home',
-            back='Input.Back'
-        )
-        value = steps[plex_value]
-        self._rpc.execute(value, dict())
+    def _socket_handler_thread(self):
+        self._keep_running = True
+        buf = str()
+        depth = 0
+        count = 0
+        while self._keep_running is True:
+            chunk = self._socket.recv(1024)
+            if 0 == len(chunk):
+                self._socket.close()
+                self._connect_socket()
+            # this is not a complete implementation
+            # there are some loose ends like:
+            # if there is an '{' or '}' escaped in a string....
+            depth += chunk.count('{')
+            depth -= chunk.count('}')
+            buf += chunk
+            count += 1
 
-    def notify(self, title, msg, duration=5000):
-        args = dict(title=title, message=msg, displaytime=duration)
-        self._rpc.execute('GUI.ShowNotification', args)
+            if (depth == 0) and (count != 0):
+                self._process_message(buf)
+                buf = str()
+                count = 0
+
+    def _process_message(self, msg):
+        msg = json.loads(msg)
+        if 'method' in msg:
+            # this is an event
+            event = msg.get('method')
+            print 'XBMC Event:', event
+            handler = self._events.get(event, None)
+            if handler:
+                print 'Dispatching handler:', str(handler)
+                Thread(target=handler).start()
+        else:
+            # this is an response
+            self._response_queue.put(msg)
+
+    def _execute(self, json_data):
+        self._socket.sendall(json_data)
+        return self._response_queue.get()
+
+
+class XbmcHTTPRPC(XbmcRPC):
+    def __init__(self, host, port, username='xbmc', password='xbmc'):
+        super(XbmcHTTPRPC, self).__init__()
+        self.host = host
+        self.port = port
+        self.username = username
+        self.password = password
+        self.url = 'http://%s:%d/jsonrpc' % (self.host, self.port)
+        _auth = '%s:%s' % (self.username, self.password)
+        self._headers = {
+            'Content-Type': 'application/json',
+            'User-Agent': 'PlexMyXBMC',
+            'Authorization': _auth.encode('base64').strip()
+        }
+
+    def _execute(self, json_data):
+        req = urllib2.Request(self.url, json_data, self._headers)
+        return urllib2.urlopen(req).read().strip()
