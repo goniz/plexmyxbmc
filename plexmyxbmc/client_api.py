@@ -83,7 +83,23 @@ class ThreadedAPIServer(ThreadingMixIn, HTTPServer):
         resp = dict2xml_withheader(resp, root_node='MediaContainer')
         return dict(data=resp, headers=self._plex_headers, code=200)
 
-    @route('player/timeline/poll', quite=True)
+    @route('player/timeline/subscribe')
+    def handle_timeline_subscribe(self, request, path, params):
+        assert 'http' == params.get('protocol'), 'http is the only protocol supported'
+        host = request.client_address[0]
+        port = params.get('port', 32400)
+        uuid = request.headers.get('X-Plex-Client-Identifier', "")
+        command_id = params.get('commandID', 0)
+        self.plex.sub_mgr.add(uuid, host, port, command_id)
+        return dict(data='', headers=dict(), code=200)
+
+    @route('player/timeline/unsubscribe')
+    def handle_timeline_unsubscribe(self, request, path, params):
+        uuid = request.headers.get('X-Plex-Client-Identifier', "")
+        self.plex.sub_mgr.remove(uuid)
+        return dict(data='', headers=dict(), code=200)
+
+    @route('player/timeline/poll', quite=False)
     def handle_timeline_poll(self, request, path, params):
         # defaults to '0' if 'wait' doesnt exist
         if params.get('wait', '0') == '1':

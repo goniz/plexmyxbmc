@@ -8,6 +8,7 @@ from plexmyxbmc.registration import ClientRegistration, ClientInfo
 from plexmyxbmc.xbmc_rpc import XbmcRPC, XBMC
 from plexmyxbmc.server import MyPlexServer
 from plexmyxbmc.client_api import ThreadedAPIServer, PlexClientHandler
+from plexmyxbmc.subscription import PlexSubManager
 
 
 class PlexClient(object):
@@ -26,6 +27,7 @@ class PlexClient(object):
         self.xbmc.notify('Plex', 'Logged in as "%s"' % self.config['plex_username'])
         self._server = self.get_coolest_server()
         self.xbmc.notify('Plex', 'using PMS %s' % self._server.friendlyName)
+        self.sub_mgr = PlexSubManager()
         self.httpd = ThreadedAPIServer(('', self.config['port']), PlexClientHandler)
         self.httpd.allow_reuse_address = True
         self.httpd.plex = self
