@@ -1,11 +1,12 @@
 #!/usr/bin/python2
 from threading import Lock
 from plexapi.myplex import MyPlexUser
+from plexapi.exceptions import NotFound
 
 from plexmyxbmc.config import Configuration, default_system_config_path
 from plexmyxbmc.registration import ClientRegistration, ClientInfo
 from plexmyxbmc.xbmc_rpc import XbmcRPC, XBMC
-from plexmyxbmc.discovery import PlexGDM
+from plexmyxbmc.server import MyPlexServer
 from plexmyxbmc.client_api import ThreadedAPIServer, PlexClientHandler
 
 
@@ -54,16 +55,30 @@ class PlexClient(object):
         self.registration_thread.stop()
 
     def join(self):
-        self.registration_thread.join()
+        if self.registration_thread.isAlive():
+            self.registration_thread.join()
 
     def get_coolest_server(self):
-        gdm = PlexGDM(self._user)
-        servers = gdm.discover()
-        print 'Found %d Plex Media Servers on LAN, chose %s' % (
-            len(servers),
-            servers[0].friendlyName
-        )
-        return servers[0]
+        servers = self._user.servers()
+        servers = map(MyPlexServer, servers)
+        print 'MyPlex registered servers'
+        print '\t\n'.join(map(str, servers))
+
+        local_servers = map(lambda x: x.connect_local(), servers)
+        local_servers = filter(None, local_servers)
+        if local_servers:
+            print 'Found %d local Plex Media Servers' % len(local_servers)
+            print 'Chose first local server:', local_servers[0].friendlyName
+            return local_servers[0]
+
+        external_servers = map(lambda x: x.connect_external(), servers)
+        external_servers = filter(None, external_servers)
+        if external_servers:
+            print 'Found %d external Plex Media Servers' % len(external_servers)
+            print 'Chose first external server:', external_servers[0].friendlyName
+            return external_servers[0]
+
+        raise NotFound()
 
     @property
     def server(self):

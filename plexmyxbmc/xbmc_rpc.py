@@ -5,6 +5,10 @@ from threading import Lock
 from plexmyxbmc import millis_to_time
 
 
+class InvalidRPCConnection(Exception):
+    pass
+
+
 class XbmcRPC(object):
     def __init__(self, host, port, username='xbmc', password='xbmc'):
         self.host = host
@@ -41,6 +45,12 @@ class XbmcRPC(object):
             return resp['result']
         return None
 
+    def verify(self):
+        res = self.execute('JSONRPC.Ping', tuple())
+        if res == u'pong':
+            return True
+        return False
+
 
 class PlayerType(object):
     def __init__(self, type):
@@ -67,6 +77,8 @@ class PlayerType(object):
 class XBMC(object):
     def __init__(self, rpc):
         self._rpc = rpc
+        if not self._rpc.verify():
+            raise InvalidRPCConnection()
 
     def get_player_properties(self, playerid):
         args = dict(playerid=int(playerid), properties=["time", "totaltime", "speed", "shuffled"])
