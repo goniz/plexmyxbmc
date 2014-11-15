@@ -5,3 +5,5 @@
 * make the configuration more like a singleton
 * PIN code signin instead of SAVING THE PASSWORD TO DISK (!)
 * Subtitle support
+
+        (Iterate over the Streams in Part for each Media, and use the selected=1 type=3 subtitle stream)
