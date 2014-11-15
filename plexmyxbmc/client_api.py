@@ -135,6 +135,7 @@ class ThreadedAPIServer(ThreadingMixIn, HTTPServer):
         media_part = media_parts[0]
         url = AuthenticatedUrl(server.url(media_part.key), self.plex.user).url
         self.plex.xbmc.play_media(url, offset)
+        self.plex.sub_mgr.last_key = key
         return dict(data='', headers=dict(), code=200)
 
     @route('player/playback/stop')

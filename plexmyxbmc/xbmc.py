@@ -31,6 +31,10 @@ class XBMC(object):
         if not self._rpc.verify():
             raise InvalidRPCConnection()
 
+    @property
+    def rpc(self):
+        return self._rpc
+
     def get_player_properties(self, playerid):
         args = dict(playerid=int(playerid), properties=["time", "totaltime", "speed", "shuffled"])
         resp = self._rpc.execute("Player.GetProperties", args)
@@ -44,7 +48,7 @@ class XBMC(object):
             properties['time'] = 0
             properties['duration'] = 0
             properties['state'] = "stopped"
-            properties['shuffle'] = False
+            properties['shuffle'] = '0'
 
         properties['seekRange'] = '0-%d' % properties['duration']
         properties['volume'] = self.volume

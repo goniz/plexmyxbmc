@@ -104,6 +104,7 @@ class XbmcJSONRPC(XbmcRPC):
             # this is not a complete implementation
             # there are some loose ends like:
             # if there is an '{' or '}' escaped in a string....
+            #TODO: fix this
             depth += chunk.count('{')
             depth -= chunk.count('}')
             buf += chunk
@@ -120,10 +121,12 @@ class XbmcJSONRPC(XbmcRPC):
             # this is an event
             event = msg.get('method')
             print 'XBMC Event:', event
-            handler = self._events.get(event, None)
-            if handler:
-                print 'Dispatching handler:', str(handler)
-                Thread(target=handler).start()
+            handlers = self._events.get(event, [])
+            if handlers:
+                print 'Dispatching handlers:', str(handlers)
+                #TODO: might be better to have only one thread dedicated for callbacks
+                for handler in handlers:
+                    Thread(target=handler).start()
         else:
             # this is an response
             self._response_queue.put(msg)
