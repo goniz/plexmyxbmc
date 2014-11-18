@@ -59,7 +59,6 @@ class XbmcJSONRPC(XbmcRPC):
 
     def __del__(self):
         self.stop()
-        del self._thread
 
     def _connect_socket(self):
         with self._lock:
@@ -95,7 +94,6 @@ class XbmcJSONRPC(XbmcRPC):
         self._keep_running = True
         buf = str()
         depth = 0
-        count = 0
         while self._keep_running is True:
             chunk = self._socket.recv(1024)
             if 0 == len(chunk):
@@ -104,16 +102,21 @@ class XbmcJSONRPC(XbmcRPC):
             # this is not a complete implementation
             # there are some loose ends like:
             # if there is an '{' or '}' escaped in a string....
-            #TODO: fix this
-            depth += chunk.count('{')
-            depth -= chunk.count('}')
-            buf += chunk
-            count += 1
+            for i in xrange(len(chunk)):
+                c = chunk[i]
+                # try to keep track of the delimiters of json messages
+                if c == '{':
+                    depth += 1
+                if c == '}':
+                    depth -= 1
 
-            if (depth == 0) and (count != 0):
-                self._process_message(buf)
-                buf = str()
-                count = 0
+                buf += c
+                # if the stars align (we found both START and END of a single json msg
+                #TODO: make sure that we found at least 1 '{' (start) to avoid cases where
+                #TODO: we didnt find '{' and depth will be 0
+                if depth == 0:
+                    self._process_message(buf)
+                    buf = str()
 
     def _process_message(self, msg):
         msg = json.loads(msg)
