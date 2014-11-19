@@ -3,7 +3,7 @@ from threading import Lock
 from plexapi.myplex import MyPlexUser
 from plexapi.exceptions import NotFound
 
-from plexmyxbmc.config import Configuration, default_system_config_path
+from plexmyxbmc.config import get_config
 from plexmyxbmc.registration import ClientRegistration, ClientInfo
 from plexmyxbmc.xbmc_rpc import XbmcJSONRPC
 from plexmyxbmc.xbmc import XBMC
@@ -14,7 +14,7 @@ from plexmyxbmc.subscription import PlexSubManager
 
 class PlexClient(object):
     def __init__(self):
-        self.config = Configuration(default_system_config_path())
+        self.config = get_config()
         self.config.verify()
         self.c_info = ClientInfo.from_config(self.config)
         self.registration_thread = ClientRegistration(self.c_info)
@@ -23,6 +23,7 @@ class PlexClient(object):
         self.xbmc.notify('Plex', 'PlexMyXBMC Connected')
         self._user = MyPlexUser(self.config['plex_username'], self.config['plex_password'])
         self.xbmc.notify('Plex', 'Logged in as "%s"' % self.config['plex_username'])
+        self.xbmc.notify('Plex', 'Searching for connectable servers...', duration=10*1000)
         self._server = self.get_coolest_server()
         self.xbmc.notify('Plex', 'using PMS %s' % self._server.friendlyName)
         self.sub_mgr = PlexSubManager(self._xbmc)

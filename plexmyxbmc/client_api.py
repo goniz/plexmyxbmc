@@ -8,7 +8,7 @@ import plexapi.video as video
 
 import plexmyxbmc
 from plexmyxbmc.xml import dict2xml_withheader
-from plexmyxbmc.config import Configuration, default_system_config_path
+from plexmyxbmc.config import get_config
 
 # contains the ThreadedAPIServer uri to handler routes
 __ROUTES__ = dict()
@@ -46,7 +46,7 @@ class ThreadedAPIServer(ThreadingMixIn, HTTPServer):
 
     def __init__(self, addr, handler_class, bind_and_activate=True):
         HTTPServer.__init__(self, addr, handler_class, bind_and_activate)
-        self.config = Configuration(default_system_config_path())
+        self.config = get_config()
         self.plex = None
         self._plex_headers = {
             "Content-type": "application/x-www-form-urlencoded",

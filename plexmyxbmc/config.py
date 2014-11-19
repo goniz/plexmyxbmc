@@ -3,7 +3,7 @@
 import json
 import os
 import uuid
-from plexmyxbmc.lock import Lock
+from threading import Lock
 
 
 class ConfigurationError(Exception):
@@ -11,11 +11,9 @@ class ConfigurationError(Exception):
 
 
 class Configuration(dict):
-    LOCK_PATH = '/tmp/.plexmyxbmc.lock'
-
     def __init__(self, path):
         self.path = path
-        self.lock = Lock(Configuration.LOCK_PATH)
+        self.lock = Lock()
         if os.path.isfile(path):
             try:
                 self.lock.acquire()
@@ -33,11 +31,10 @@ class Configuration(dict):
         self.commit()
 
     def commit(self):
-        self.lock.acquire()
-        fp = open(self.path, 'wb')
-        json.dump(self, fp)
-        fp.close()
-        self.lock.release()
+        with self.lock:
+            fp = open(self.path, 'wb')
+            json.dump(self, fp)
+            fp.close()
 
     def verify(self):
         if self.get('uuid') is None:
@@ -62,3 +59,9 @@ class Configuration(dict):
 
 def default_system_config_path():
     return os.path.join(os.environ['HOME'], '.plexmyxbmc.json')
+
+__config = Configuration(default_system_config_path())
+
+
+def get_config():
+    return __config

@@ -1,12 +1,12 @@
 #!/usr/bin/python2
 
 import sys
-from plexmyxbmc.config import Configuration, default_system_config_path
+from plexmyxbmc.config import get_config
 from plexmyxbmc.client import PlexClient
 
 
 def main():
-    config = Configuration(default_system_config_path())
+    config = get_config()
     config.verify()
 
     client = PlexClient()

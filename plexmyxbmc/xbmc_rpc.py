@@ -126,10 +126,10 @@ class XbmcJSONRPC(XbmcRPC):
             print 'XBMC Event:', event
             handlers = self._events.get(event, [])
             if handlers:
-                print 'Dispatching handlers:', str(handlers)
+                print 'Dispatching %d handler(s)' % len(handlers)
                 #TODO: might be better to have only one thread dedicated for callbacks
                 for handler in handlers:
-                    Thread(target=handler).start()
+                    Thread(target=handler, args=(msg, )).start()
         else:
             # this is an response
             self._response_queue.put(msg)

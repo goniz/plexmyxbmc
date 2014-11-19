@@ -36,14 +36,17 @@ class PlexSubManager(object):
         self._register_xbmc_callbacks()
 
     def __del__(self):
-        self._xbmc.rpc.unregister('Application.OnVolumeChanged', self.notify)
-        self._xbmc.rpc.unregister('Player.OnPause', self.notify)
-        self._xbmc.rpc.unregister('Player.OnPlay', self.notify)
+        self._xbmc.rpc.unregister('Application.OnVolumeChanged', self._notify_handler)
+        self._xbmc.rpc.unregister('Player.OnPause', self._notify_handler)
+        self._xbmc.rpc.unregister('Player.OnPlay', self._notify_handler)
 
     def _register_xbmc_callbacks(self):
-        self._xbmc.rpc.register('Application.OnVolumeChanged', self.notify)
-        self._xbmc.rpc.register('Player.OnPause', self.notify)
-        self._xbmc.rpc.register('Player.OnPlay', self.notify)
+        self._xbmc.rpc.register('Application.OnVolumeChanged', self._notify_handler)
+        self._xbmc.rpc.register('Player.OnPause', self._notify_handler)
+        self._xbmc.rpc.register('Player.OnPlay', self._notify_handler)
+
+    def _notify_handler(self, msg):
+        self.notify()
 
     def add(self, uuid, host, port, command_id):
         with self._lock:
