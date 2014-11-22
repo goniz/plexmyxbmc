@@ -4,7 +4,6 @@ import time
 from urlparse import urlparse, parse_qs
 from SocketServer import ThreadingMixIn
 from BaseHTTPServer import HTTPServer, BaseHTTPRequestHandler
-import plexapi.video as video
 
 import plexmyxbmc
 from plexmyxbmc.xml import dict2xml_withheader
@@ -15,19 +14,6 @@ __ROUTES__ = dict()
 
 # contains the routes NOT to verbose about
 __ROUTES_SHUTUP__ = list()
-
-
-class AuthenticatedUrl(object):
-    def __init__(self, url, user):
-        self._url = url
-        self._user = user
-
-    @property
-    def url(self):
-        return self._url + '?X-Plex-Token=' + self._user.authenticationToken
-
-    def __str__(self):
-        return self.url
 
 
 def route(uri, quite=False):
@@ -47,22 +33,15 @@ class ThreadedAPIServer(ThreadingMixIn, HTTPServer):
     def __init__(self, addr, handler_class, bind_and_activate=True):
         HTTPServer.__init__(self, addr, handler_class, bind_and_activate)
         self.config = get_config()
+        self._ok_msg = dict2xml_withheader(dict(code='200', status='OK'), root_node='Response')
         self.plex = None
-        self._plex_headers = {
-            "Content-type": "application/x-www-form-urlencoded",
-            "Access-Control-Allow-Origin": "*",
-            "X-Plex-Version": plexmyxbmc.__version__,
-            "X-Plex-Client-Identifier": self.config['uuid'],
-            "X-Plex-Provides": "player",
-            "X-Plex-Product": "PlexCast",
-            "X-Plex-Device-Name": self.config['name'],
-            "X-Plex-Platform": "Linux",
-            "X-Plex-Model": "PlexCast",
-            "X-Plex-Device": "PC",
-        }
 
-        if not self.config.get('plex_username') is None:
-            self._plex_headers["X-Plex-Username"] = self.config['plex_username']
+    def update_command_id(self, req, params):
+        uuid = req.headers.get('X-Plex-Client-Identifier', "")
+        command_id = params.get('commandID', 0)
+        sub = self.plex.sub_mgr.get(uuid, None)
+        if sub:
+            sub.update(cmd_id=command_id)
 
     @route('resources')
     def handle_resources(self, request, path, params):
@@ -79,42 +58,43 @@ class ThreadedAPIServer(ThreadingMixIn, HTTPServer):
                 "deviceClass": "pc"
             }
         }
+
+        self.update_command_id(request, params)
         self.plex.xbmc.notify('Plex', 'Detected Remote Control')
         resp = dict2xml_withheader(resp, root_node='MediaContainer')
-        return dict(data=resp, headers=self._plex_headers, code=200)
+        return dict(data=resp, headers=self.plex.headers, code=200)
 
     @route('player/timeline/subscribe')
     def handle_timeline_subscribe(self, request, path, params):
         assert 'http' == params.get('protocol'), 'http is the only protocol supported'
         host = request.client_address[0]
-        port = params.get('port', 32400)
+        port = int(params.get('port', 32400))
         uuid = request.headers.get('X-Plex-Client-Identifier', "")
         command_id = params.get('commandID', 0)
-        self.plex.sub_mgr.add(uuid, host, port, command_id)
-        return dict(data='', headers=dict(), code=200)
+        self.plex.sub_mgr.add(uuid, host, port, command_id, headers=request.headers)
+
+        self.plex.sub_mgr.notify_all_delayed()
+        return dict(data=self._ok_msg, headers=self.plex.headers, code=200)
 
     @route('player/timeline/unsubscribe')
     def handle_timeline_unsubscribe(self, request, path, params):
         uuid = request.headers.get('X-Plex-Client-Identifier', "")
+        self.update_command_id(request, params)
         self.plex.sub_mgr.remove(uuid)
-        return dict(data='', headers=dict(), code=200)
+        return dict(data=self._ok_msg, headers=self.plex.headers, code=200)
 
-    @route('player/timeline/poll', quite=False)
+    @route('player/timeline/poll', quite=True)
     def handle_timeline_poll(self, request, path, params):
         # defaults to '0' if 'wait' doesnt exist
         if params.get('wait', '0') == '1':
             time.sleep(1)
-        commandID = params.get('commandID', 0)
+
+        self.update_command_id(request, params)
+        command_id = params.get('commandID', 0)
         state = self.plex.xbmc.get_players_state()
-        state['commandID'] = commandID
+        state['commandID'] = command_id
         xml = dict2xml_withheader(state, root_node='MediaContainer')
-        headers = {
-            'X-Plex-Client-Identifier': self.config['uuid'],
-            'Access-Control-Expose-Headers': 'X-Plex-Client-Identifier',
-            'Access-Control-Allow-Origin': '*',
-            'Content-Type': 'text/xml'
-        }
-        return dict(data=xml, headers=headers, code=200)
+        return dict(data=xml, headers=self.plex.headers, code=200)
 
     @route('player/playback/playMedia')
     def handle_play_media(self, request, path, params):
@@ -122,54 +102,55 @@ class ThreadedAPIServer(ThreadingMixIn, HTTPServer):
         key = params.get('key')
         offset = int(params.get('offset', 0))
 
-        server = self.plex.server
-        item = video.list_items(server, key, video.Episode.TYPE)
-        if not item:
-            raise Exception()
-
-        item = item[0]
-        media_parts = [x for x in item.iter_parts()]
-        if not media_parts:
-            raise Exception()
-
-        media_part = media_parts[0]
-        url = AuthenticatedUrl(server.url(media_part.key), self.plex.user).url
-        self.plex.xbmc.play_media(url, offset)
-        self.plex.sub_mgr.last_key = key
-        return dict(data='', headers=dict(), code=200)
+        self.update_command_id(request, params)
+        self.plex.xbmc.play_key(key, offset)
+        self.plex.xbmc.metadata['containerKey'] = params.get('containerKey').split('?')[0]
+        self.plex.xbmc.metadata['machineIdentifier'] = params.get('machineIdentifier')
+        self.plex.sub_mgr.notify_all_delayed()
+        return dict(data=self._ok_msg, headers=self.plex.headers, code=200)
 
     @route('player/playback/stop')
     def handle_player_stop(self, request, path, params):
+        self.update_command_id(request, params)
         self.plex.xbmc.stop()
-        return dict(data='', headers=dict(), code=200)
+        self.plex.sub_mgr.notify_all_delayed()
+        return dict(data=self._ok_msg, headers=self.plex.headers, code=200)
 
     @route('player/playback/setParameters')
     def handle_playback_set_parameters(self, request, path, params):
+        self.update_command_id(request, params)
         if 'volume' in params:
             self.plex.xbmc.volume = int(params['volume'])
-        return dict(data='', headers=dict(), code=200)
+        return dict(data=self._ok_msg, headers=self.plex.headers, code=200)
 
     @route('player/playback/pause')
     @route('player/playback/play')
     def handle_playback_pause(self, request, path, params):
+        self.update_command_id(request, params)
         state = True if path.endswith('play') else False
         self.plex.xbmc.play_pause(state)
-        return dict(data='', headers=dict(), code=200)
+        self.plex.sub_mgr.notify_all_delayed()
+        return dict(data=self._ok_msg, headers=self.plex.headers, code=200)
 
     @route('player/playback/seekTo')
     def handle_playback_seekto(self, request, path, params):
+        self.update_command_id(request, params)
         offset = int(params.get('offset', 0))
         self.plex.xbmc.seek(offset)
-        return dict(data='', headers=dict(), code=200)
+        self.plex.sub_mgr.notify_all_delayed()
+        return dict(data=self._ok_msg, headers=self.plex.headers, code=200)
 
     @route('player/playback/stepForward')
     @route('player/playback/stepBack')
     @route('player/playback/skipNext')
     @route('player/playback/skipPrevious')
     def handle_playback_step(self, request, path, params):
+        self.update_command_id(request, params)
         value = path.split('/')[-1]
         self.plex.xbmc.step(value)
-        return dict(data='', headers=dict(), code=200)
+        self.plex.sub_mgr.notify_all_delayed()
+        return dict(data=self._ok_msg, headers=self.plex.headers, code=200)
+
 
     @route("player/navigation/moveUp")
     @route("player/navigation/moveDown")
@@ -181,7 +162,7 @@ class ThreadedAPIServer(ThreadingMixIn, HTTPServer):
     def handle_navigation(self, request, path, params):
         value = path.split('/')[-1]
         self.plex.xbmc.navigate(value)
-        return dict(data='', headers=dict(), code=200)
+        return dict(data=self._ok_msg, headers=self.plex.headers, code=200)
 
 
 class PlexClientHandler(BaseHTTPRequestHandler):
@@ -270,6 +251,8 @@ class PlexClientHandler(BaseHTTPRequestHandler):
             except Exception as e:
                 resp = dict(data=str(e), headers=dict(), code=500)
 
+            resp['headers']['Content-Type'] = 'text/xml'
+            resp['headers']['X-Plex-Client-Identifier'] = get_config().get('uuid')
             if not request_path in __ROUTES_SHUTUP__:
-                print 'Responded with', resp
+                print 'Responded with code:', resp['code'], 'data:', resp['data']
             self.response(resp['data'], headers=resp['headers'], code=resp['code'])

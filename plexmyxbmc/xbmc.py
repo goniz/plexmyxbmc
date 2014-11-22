@@ -1,6 +1,7 @@
 import plexmyxbmc
 from plexmyxbmc import millis_to_time
 from plexmyxbmc.xbmc_rpc import InvalidRPCConnection
+import plexapi.video as video
 
 
 class PlayerType(object):
@@ -50,47 +51,11 @@ class XBMC(object):
             properties['state'] = "stopped"
             properties['shuffle'] = '0'
 
-        properties['seekRange'] = '0-%d' % properties['duration']
         properties['volume'] = self.volume
-        properties['protocol'] = 'http'
-        properties['guid'] = ''
         return properties
-
-    def get_timeline(self, playerid, playertype, location='navigation'):
-        timeline = dict(location=location, type=playertype.plex)
-        if playerid > 0:
-            prop = self.get_player_properties(playerid)
-            timeline.update(prop)
-            timeline['controllable'] = "playPause,play,stop,skipPrevious,skipNext,volume,stepBack,stepForward,seekTo"
-        else:
-            timeline['state'] = 'stopped'
-            timeline['time'] = 0
-        return timeline
 
     def get_active_players(self):
         return self._rpc.execute('Player.GetActivePlayers', tuple())
-
-    def get_players_state(self):
-        state = dict()
-        players = self.get_active_players()
-
-        state['location'] = "navigation"
-        index = 0
-        for mediatype in ('audio', 'photo', 'video'):
-            mediatype = PlayerType(mediatype)
-            player = filter(lambda x: PlayerType(x['type']) == mediatype, players)
-            if player:
-                playerid = int(player[0]['playerid'])
-                state['location'] = 'fullScreen' + mediatype.plex.capitalize()
-            else:
-                playerid = -1
-
-            # hack to generate 'Timeline_', 'Timeline__' or 'Timeline___' to cheat dict2xml
-            key = 'Timeline' + ('_' * index)
-            state[key] = self.get_timeline(playerid, mediatype, location=state['location'])
-            index += 1
-
-        return state
 
     def play_media(self, url, offset=0):
         params = dict(
@@ -139,6 +104,21 @@ class XBMC(object):
             print 'Seek params', str(params)
             self._rpc.execute("Player.Seek", params)
 
+    def notify(self, title, msg, duration=5000):
+        args = dict(title=title, message=msg, displaytime=duration)
+        self._rpc.execute('GUI.ShowNotification', args)
+
+
+class XBMCPlexPlayer(XBMC):
+    def __init__(self, rpc, plex):
+        super(XBMCPlexPlayer, self).__init__(rpc)
+        self._plex = plex
+        self._metadata = dict()
+
+    @property
+    def metadata(self):
+        return self._metadata
+
     def step(self, plex_value):
         steps = dict(
             stepForward='smallforward',
@@ -162,6 +142,105 @@ class XBMC(object):
         value = steps[plex_value]
         self._rpc.execute(value, dict())
 
-    def notify(self, title, msg, duration=5000):
-        args = dict(title=title, message=msg, displaytime=duration)
-        self._rpc.execute('GUI.ShowNotification', args)
+    """
+    <?xml version="1.0" encoding="utf-8" ?>
+    <MediaContainer location="fullScreenVideo" commandID="2">
+      <Timeline seekRange="0-0" state="stopped" time="0" type="music" />
+      <Timeline address="10.0.0.51"
+                audioStreamID="22489"
+                containerKey="/playQueues/571"
+                controllable="playPause,stop,shuffle,repeat,volume,stepBack,stepForward,seekTo,subtitleStream,audioStream"
+                duration="2613280"
+                guid="com.plexapp.agents.thetvdb://73696/5/17?lang=en"
+                key="/library/metadata/6311"
+                location="fullScreenVideo"
+                machineIdentifier="74ce2e42128acd4f517274d7ab6457bbfe0f5381"
+                mute="0"
+                playQueueID="571"
+                playQueueItemID="2500"
+                port="32400"
+                protocol="http"
+                ratingKey="6311"
+                repeat="0"
+                seekRange="0-2613280"
+                shuffle="0"
+                state="playing"
+                subtitleStreamID="-1"
+                time="53"
+                type="video"
+                volume="83" />
+      <Timeline seekRange="0-0" state="stopped" time="0" type="photo" />
+    </MediaContainer>
+    """
+
+    def get_timeline(self, playerid, playertype):
+        timeline = dict(type=playertype.plex)
+        if playerid > 0:
+            prop = self.get_player_properties(playerid)
+            timeline.update(prop)
+            timeline['controllable'] = "playPause,play,stop,skipPrevious,skipNext,volume,stepBack,stepForward,seekTo"
+            timeline['seekRange'] = '0-%d' % prop['duration']
+            timeline['guid'] = ''
+            timeline['machineIdentifier'] = self.metadata.get('machineIdentifier', '')
+
+            vid = self.metadata.get('video', None)
+            if not vid is None:
+                timeline['address'] = vid.server.address
+                timeline['port'] = str(vid.server.port)
+                timeline['protocol'] = 'http'
+                timeline['key'] = vid.key
+                timeline['ratingKey'] = vid.ratingKey
+                timeline['subtitleStreamID'] = '-1'
+
+            container_key = self.metadata.get('containerKey', None)
+            if not video is None:
+                timeline['containerKey'] = container_key
+                timeline['playQueueID'] = container_key.strip().split('/')[-1]
+        else:
+            timeline['state'] = 'stopped'
+            timeline['time'] = 0
+        return timeline
+
+    def get_players_state(self):
+        state = dict()
+        players = self.get_active_players()
+
+        state['location'] = "navigation"
+        index = 0
+        for mediatype in ('audio', 'photo', 'video'):
+            mediatype = PlayerType(mediatype)
+            player = filter(lambda x: PlayerType(x['type']) == mediatype, players)
+            if player:
+                playerid = int(player[0]['playerid'])
+                state['location'] = 'fullScreen' + mediatype.plex.capitalize()
+            else:
+                playerid = -1
+
+            # hack to generate 'Timeline_', 'Timeline__' or 'Timeline___' to cheat dict2xml
+            key = 'Timeline' + ('_' * index)
+            state[key] = self.get_timeline(playerid, mediatype)
+            state[key]['location'] = state['location']
+            index += 1
+
+        return state
+
+    def play_video(self, video, offset=0):
+        # gets a plexapi.video.Video object
+        media_parts = [x for x in video.iter_parts()]
+        if not media_parts:
+            raise Exception(video)
+
+        media_part = media_parts[0]
+        url = self._plex.authenticated_url(media_part.key)
+        self.play_media(url, offset)
+        self._metadata['video'] = video
+        self._metadata['part'] = media_part
+
+    def play_key(self, key, offset=0):
+        server = self._plex.server
+        item = video.list_items(server, key, video.Episode.TYPE)
+        if not item:
+            raise Exception()
+
+        item = item[0]
+        self.play_video(item, offset)

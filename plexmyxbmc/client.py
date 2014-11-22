@@ -3,10 +3,11 @@ from threading import Lock
 from plexapi.myplex import MyPlexUser
 from plexapi.exceptions import NotFound
 
+import plexmyxbmc
 from plexmyxbmc.config import get_config
 from plexmyxbmc.registration import ClientRegistration, ClientInfo
 from plexmyxbmc.xbmc_rpc import XbmcJSONRPC
-from plexmyxbmc.xbmc import XBMC
+from plexmyxbmc.xbmc import XBMCPlexPlayer
 from plexmyxbmc.server import MyPlexServer
 from plexmyxbmc.client_api import ThreadedAPIServer, PlexClientHandler
 from plexmyxbmc.subscription import PlexSubManager
@@ -18,21 +19,21 @@ class PlexClient(object):
         self.config.verify()
         self.c_info = ClientInfo.from_config(self.config)
         self.registration_thread = ClientRegistration(self.c_info)
-        self._xbmc_rpc = XbmcJSONRPC(self.config['xbmc_host'], self.config['xbmc_port'])
-        self._xbmc = XBMC(self._xbmc_rpc)
+        # this call will block if XBMC is unresponsive, will resume when XBMC is UP
+        self._xbmc_rpc = XbmcJSONRPC(self.config['xbmc_host'], self.config['xbmc_port']).wait()
+        self._xbmc = XBMCPlexPlayer(self._xbmc_rpc, self)
         self.xbmc.notify('Plex', 'PlexMyXBMC Connected')
         self._user = MyPlexUser(self.config['plex_username'], self.config['plex_password'])
         self.xbmc.notify('Plex', 'Logged in as "%s"' % self.config['plex_username'])
         self.xbmc.notify('Plex', 'Searching for connectable servers...', duration=10*1000)
         self._server = self.get_coolest_server()
         self.xbmc.notify('Plex', 'using PMS %s' % self._server.friendlyName)
-        self.sub_mgr = PlexSubManager(self._xbmc)
+        self.sub_mgr = PlexSubManager(self)
         self.httpd = ThreadedAPIServer(('', self.config['port']), PlexClientHandler)
         self.httpd.allow_reuse_address = True
         self.httpd.plex = self
         #self.httpd.timeout = 5
         self._keep_running = False
-        self._last_key = None
         self._lock = Lock()
 
     def __del__(self):
@@ -82,6 +83,29 @@ class PlexClient(object):
 
         raise NotFound()
 
+    def authenticated_url(self, url):
+        url = self._server.url(url) if url.startswith('/') else url
+        token = 'X-Plex-Token=' + self._user.authenticationToken
+        return url + ('&' if '?' in url else '?') + token
+
+    @property
+    def headers(self):
+        plex_headers = {
+            "Content-type": "application/x-www-form-urlencoded",
+            "Access-Control-Allow-Origin": "*",
+            "X-Plex-Version": plexmyxbmc.__version__,
+            "X-Plex-Client-Identifier": self.config['uuid'],
+            "X-Plex-Provides": "player",
+            "X-Plex-Product": "PlexMyXBMC",
+            "X-Plex-Device-Name": self.config['name'],
+            "X-Plex-Platform": "Linux",
+            "X-Plex-Model": "PlexMyXBMC",
+            "X-Plex-Device": "PC",
+            "X-Plex-Username": self._user.username,
+            "X-Plex-Token": self._user.authenticationToken,
+        }
+        return plex_headers
+
     @property
     def server(self):
         return self._server
@@ -94,12 +118,3 @@ class PlexClient(object):
     def xbmc(self):
         return self._xbmc
 
-    @property
-    def last_key(self):
-        with self._lock:
-            return self._last_key
-
-    @last_key.setter
-    def last_key(self, key):
-        with self._lock:
-            self._last_key = key
