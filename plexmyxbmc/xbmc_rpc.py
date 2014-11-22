@@ -63,7 +63,7 @@ class XbmcJSONRPC(XbmcRPC):
         self._response_queue = Queue()
         self._execute_lock = Lock()
         self._keep_running = False
-        self._thread = Thread(target=self._socket_handler_thread)
+        self._thread = Thread(target=self._socket_handler_thread, name=XbmcJSONRPC.__name__)
         self._thread.start()
 
     def __del__(self):
@@ -158,7 +158,8 @@ class XbmcJSONRPC(XbmcRPC):
                 #TODO: might be better to have only one thread dedicated for callbacks
                 #TODO: or just a plain thread pool (remember that subs manager uses these threads
                 for handler in handlers:
-                    Thread(target=handler, args=(msg, )).start()
+                    tname = '%s-%d' % (event, handlers.index(handler))
+                    Thread(target=handler, args=(msg, ), name=tname).start()
         else:
             # this is an response
             self._response_queue.put(msg)

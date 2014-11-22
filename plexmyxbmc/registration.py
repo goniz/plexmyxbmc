@@ -26,7 +26,7 @@ class ClientInfo(object):
 
 class ClientRegistration(threading.Thread):
     def __init__(self, client_info):
-        super(ClientRegistration, self).__init__()
+        super(ClientRegistration, self).__init__(name=self.__class__.__name__)
         self.c_info = client_info
         self.multicast_addr = '239.0.0.250'
         self.update_port = 32412
