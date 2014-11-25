@@ -1,6 +1,15 @@
 PlexMyXBMC
 ==========
 
+Description:
+
+    PlexMyXBMC lets you use your existing XBMC Player as a fully working Plex client.
+    Control your XBMC with the Android Plex App, iOS Plex App, Plex Web Client and any other plex controller.
+    for example, login to Plex Web App and choose "Cast to PlexMyXBMC"
+    then go browse your library on the web app and finally choose your movie/episode/etc.. and click play
+    now your chosen media is playing on your XBMC player directly from the Plex Media Server !
+    Currently does not support transcoding, playqueues or playlists
+	
 Dependencies:
 
 	* Python 2.7.*
