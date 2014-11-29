@@ -142,37 +142,6 @@ class XBMCPlexPlayer(XBMC):
         value = steps[plex_value]
         self._rpc.execute(value, dict())
 
-    """
-    <?xml version="1.0" encoding="utf-8" ?>
-    <MediaContainer location="fullScreenVideo" commandID="2">
-      <Timeline seekRange="0-0" state="stopped" time="0" type="music" />
-      <Timeline address="10.0.0.51"
-                audioStreamID="22489"
-                containerKey="/playQueues/571"
-                controllable="playPause,stop,shuffle,repeat,volume,stepBack,stepForward,seekTo,subtitleStream,audioStream"
-                duration="2613280"
-                guid="com.plexapp.agents.thetvdb://73696/5/17?lang=en"
-                key="/library/metadata/6311"
-                location="fullScreenVideo"
-                machineIdentifier="74ce2e42128acd4f517274d7ab6457bbfe0f5381"
-                mute="0"
-                playQueueID="571"
-                playQueueItemID="2500"
-                port="32400"
-                protocol="http"
-                ratingKey="6311"
-                repeat="0"
-                seekRange="0-2613280"
-                shuffle="0"
-                state="playing"
-                subtitleStreamID="-1"
-                time="53"
-                type="video"
-                volume="83" />
-      <Timeline seekRange="0-0" state="stopped" time="0" type="photo" />
-    </MediaContainer>
-    """
-
     def get_timeline(self, playerid, playertype):
         timeline = dict(type=playertype.plex)
         if playerid > 0:
@@ -184,18 +153,18 @@ class XBMCPlexPlayer(XBMC):
             timeline['machineIdentifier'] = self.metadata.get('machineIdentifier', '')
 
             vid = self.metadata.get('video', None)
-            if not vid is None:
+            if vid is not None:
                 timeline['address'] = vid.server.address
                 timeline['port'] = str(vid.server.port)
                 timeline['protocol'] = 'http'
                 timeline['key'] = vid.key
                 timeline['ratingKey'] = vid.ratingKey
-                timeline['subtitleStreamID'] = '-1'
+                # timeline['subtitleStreamID'] = '-1'
 
             container_key = self.metadata.get('containerKey', None)
-            if not video is None:
+            if video is not None:
                 timeline['containerKey'] = container_key
-                timeline['playQueueID'] = container_key.strip().split('/')[-1]
+                # timeline['playQueueID'] = container_key.strip().split('/')[-1]
         else:
             timeline['state'] = 'stopped'
             timeline['time'] = 0

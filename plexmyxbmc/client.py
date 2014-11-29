@@ -20,7 +20,7 @@ class PlexClient(object):
         self.config.verify()
         self.c_info = ClientInfo.from_config(self.config)
         self._monitor = ThreadMonitor()
-        self._monitor.start()
+        # self._monitor.start()
         self.registration_thread = ClientRegistration(self.c_info)
         # this call will block if XBMC is unresponsive, will resume when XBMC is UP
         self._xbmc_rpc = XbmcJSONRPC(self.config['xbmc_host'], self.config['xbmc_port']).wait()
@@ -35,7 +35,6 @@ class PlexClient(object):
         self.httpd = ThreadedAPIServer(('', self.config['port']), PlexClientHandler)
         self.httpd.allow_reuse_address = True
         self.httpd.plex = self
-        #self.httpd.timeout = 5
         self._keep_running = Event()
         self._keep_running.clear()
         self._lock = Lock()
@@ -60,11 +59,13 @@ class PlexClient(object):
         self._keep_running.clear()
         self.registration_thread.stop()
         self._xbmc_rpc.stop()
-        self._monitor.stop()
+        # self._monitor.stop()
 
     def join(self):
         if self.registration_thread.isAlive():
             self.registration_thread.join()
+        if self._monitor.isAlive():
+            self._monitor.join()
 
     def get_coolest_server(self):
         servers = self._user.servers()

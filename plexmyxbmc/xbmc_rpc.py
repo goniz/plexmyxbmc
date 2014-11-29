@@ -140,8 +140,8 @@ class XbmcJSONRPC(XbmcRPC):
 
                 buf += c
                 # if the stars align (we found both START and END of a single json msg
-                #TODO: make sure that we found at least 1 '{' (start) to avoid cases where
-                #TODO: we didnt find '{' and depth will be 0
+                # TODO: make sure that we found at least 1 '{' (start) to avoid cases where
+                # TODO: we didnt find '{' and depth will be 0
                 if depth == 0:
                     self._process_message(buf)
                     buf = str()
@@ -155,8 +155,8 @@ class XbmcJSONRPC(XbmcRPC):
             handlers = self._events.get(event, [])
             if handlers:
                 print 'Dispatching %d handler(s)' % len(handlers)
-                #TODO: might be better to have only one thread dedicated for callbacks
-                #TODO: or just a plain thread pool (remember that subs manager uses these threads
+                # TODO: might be better to have only one thread dedicated for callbacks
+                # TODO: or just a plain thread pool (remember that subs manager uses these threads
                 for handler in handlers:
                     tname = '%s-%d' % (event, handlers.index(handler))
                     Thread(target=handler, args=(msg, ), name=tname).start()

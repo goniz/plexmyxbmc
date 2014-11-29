@@ -75,8 +75,9 @@ class PlexSubManager(object):
             time.sleep(delay)
             submgr.notify_all()
 
+        tname = 'DelayedNotify-%d' % (delay_secs, )
         args = (self, delay_secs)
-        Thread(target=__notify_delayed, args=args).start()
+        Thread(name=tname, target=__notify_delayed, args=args).start()
 
     def add(self, uuid, host, port, command_id, headers=None):
         with self._lock:

@@ -1,5 +1,4 @@
-* implement subscriber manager
-* notify server for timeline to improve responsiveness
+* Fix broken web client playback
 * make sure it works both on web client and android
 * PIN code signin instead of SAVING THE PASSWORD TO DISK (!)
 * fix invalid (?) playQueue
