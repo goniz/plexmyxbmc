@@ -21,7 +21,7 @@ def dict2xml(d, root_node=None):
         for value in d:
             children.append(dict2xml(value, root_singular))
 
-    end_tag = '>' if 0 < len(children) else '/>'
+    end_tag = '>\n' if 0 < len(children) else '/>\n'
 
     if wrap or isinstance(d, dict):
         xml = '<' + root + xml + end_tag
@@ -31,10 +31,10 @@ def dict2xml(d, root_node=None):
             xml = xml + child
 
         if wrap or isinstance(d, dict):
-            xml = xml + '</' + root + '>'
+            xml = xml + '</' + root + '>\n'
 
     return xml
 
 
 def dict2xml_withheader(d, root_node=None):
-    return '<?xml version="1.0" encoding="utf-8"?>' + dict2xml(d, root_node)
+    return '<?xml version="1.0" encoding="utf-8" ?>\n' + dict2xml(d, root_node)

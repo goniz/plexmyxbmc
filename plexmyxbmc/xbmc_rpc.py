@@ -4,6 +4,7 @@ import urllib2
 import socket
 from Queue import Queue
 from threading import Lock, Thread, Event
+from plexmyxbmc.log import get_logger
 
 
 class InvalidRPCConnection(Exception):
@@ -16,6 +17,7 @@ class XbmcRPC(object):
         self._id = 0
         self._alive = Event()
         self._alive.clear()
+        self._logger = get_logger(self.__class__.__name__)
 
     def _execute(self, json_data, timeout=None):
         raise NotImplementedError()
@@ -29,7 +31,7 @@ class XbmcRPC(object):
         try:
             resp = self._execute(data, timeout=timeout)
         except Exception as e:
-            print str(e)
+            self._logger.warn(str(e))
             return None
 
         if len(resp) > 0:
@@ -78,14 +80,14 @@ class XbmcJSONRPC(XbmcRPC):
                 try:
                     self._socket.connect((self._host, self._port))
                     self._alive.set()
-                    print 'Connected to XBMC'
+                    self._logger.info('Connected to XBMC')
                     return self._socket
                 except:
                     time.sleep(1)
                     continue
             self._socket.close()
             self._alive.clear()
-            print 'XBMC Disconnected'
+            self._logger.inof('XBMC Disconnected')
             raise InvalidRPCConnection()
 
     def stop(self):
@@ -151,10 +153,10 @@ class XbmcJSONRPC(XbmcRPC):
         if 'method' in msg:
             # this is an event
             event = msg.get('method')
-            print 'XBMC Event:', event
+            self._logger.info('XBMC Event: %s', event)
             handlers = self._events.get(event, [])
             if handlers:
-                print 'Dispatching %d handler(s)' % len(handlers)
+                self._logger.debug('Dispatching %d handler(s)' % len(handlers))
                 # TODO: might be better to have only one thread dedicated for callbacks
                 # TODO: or just a plain thread pool (remember that subs manager uses these threads
                 for handler in handlers:

@@ -3,6 +3,7 @@ import threading
 import socket
 import time
 import plexmyxbmc
+from plexmyxbmc.log import get_logger
 
 
 class ClientInfo(object):
@@ -19,7 +20,7 @@ class ClientInfo(object):
             conf['uuid'],
             conf['name'],
             conf['port'],
-            'PlexCast',
+            'PlexMyXBMC',
             plexmyxbmc.__version__
         )
 
@@ -34,6 +35,7 @@ class ClientRegistration(threading.Thread):
         self.client_register_group = (self.multicast_addr, self.register_port)
         self._setup_socket()
         self._keep_running = False
+        self._logger = get_logger(self.__class__.__name__)
         self.hello_headers = [
             "HELLO * HTTP/1.0"
         ]
@@ -52,7 +54,7 @@ class ClientRegistration(threading.Thread):
             "Version: %s" % self.c_info.version,
             "Protocol: plex",
             "Protocol-Version: 1",
-            "Protocol-Capabilities: navigation,playback,timeline",
+            "Protocol-Capabilities: navigation,playback,timeline,sync-target",
             "Device-Class: HTPC"
         ]
 
@@ -86,13 +88,13 @@ class ClientRegistration(threading.Thread):
 
     def stop(self):
         self._keep_running = False
-        print 'trying to stop'
+        self._logger.debug('trying to stop')
 
     def run(self):
         try:
             self.sock.bind(('0.0.0.0', self.update_port))
         except socket.error as e:
-            print 'Client Registration: Failed to bind to port %d (%s)' % (self.update_port, str(e))
+            self.warn('Client Registration: Failed to bind to port %d (%s)', self.update_port, str(e))
             return
 
         self._keep_running = True
@@ -108,10 +110,10 @@ class ClientRegistration(threading.Thread):
                 break
 
             if not data.startswith("M-SEARCH * HTTP/1."):
-                print 'Invalid request, ignoring'
+                self._logger.info('Invalid request, ignoring')
                 continue
 
             self._send_response(addr)
 
-        print 'Stopping!'
+        self._logger.debug('Stopping!')
         self._send_bye()

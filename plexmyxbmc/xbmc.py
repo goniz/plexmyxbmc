@@ -2,6 +2,7 @@ import plexmyxbmc
 from plexmyxbmc import millis_to_time
 from plexmyxbmc.xbmc_rpc import InvalidRPCConnection
 import plexapi.video as video
+from plexmyxbmc.log import get_logger
 
 
 class PlayerType(object):
@@ -28,6 +29,7 @@ class PlayerType(object):
 
 class XBMC(object):
     def __init__(self, rpc):
+        self._logger = get_logger(self.__class__.__name__)
         self._rpc = rpc
         if not self._rpc.verify():
             raise InvalidRPCConnection()
@@ -101,12 +103,19 @@ class XBMC(object):
             else:
                 raise ValueError('expected (int, str), found %s' % type(seek_value))
             params = dict(playerid=playerid, value=seek_to)
-            print 'Seek params', str(params)
+            self._logger.debug('Seek params %s', str(params))
             self._rpc.execute("Player.Seek", params)
 
     def notify(self, title, msg, duration=5000):
         args = dict(title=title, message=msg, displaytime=duration)
         self._rpc.execute('GUI.ShowNotification', args)
+
+    def __str__(self):
+        return '{0} at {1}:{2}'.format(
+            self.__class__.__name__,
+            self._rpc.host,
+            self._rpc.port
+        )
 
 
 class XBMCPlexPlayer(XBMC):
@@ -159,12 +168,12 @@ class XBMCPlexPlayer(XBMC):
                 timeline['protocol'] = 'http'
                 timeline['key'] = vid.key
                 timeline['ratingKey'] = vid.ratingKey
-                # timeline['subtitleStreamID'] = '-1'
+                timeline['subtitleStreamID'] = '-1'
 
             container_key = self.metadata.get('containerKey', None)
             if video is not None:
                 timeline['containerKey'] = container_key
-                # timeline['playQueueID'] = container_key.strip().split('/')[-1]
+                timeline['playQueueID'] = container_key.strip().split('/')[-1]
         else:
             timeline['state'] = 'stopped'
             timeline['time'] = 0

@@ -3,9 +3,11 @@ import time
 from threading import Lock, Event, Thread
 from urllib import urlencode
 from urllib2 import Request, urlopen
+
 from plexmyxbmc.xml import dict2xml_withheader
 from plexmyxbmc.config import get_config
 from plexmyxbmc.xbmc import PlayerType
+from plexmyxbmc.log import get_logger
 
 
 class PlexSubscriber(object):
@@ -37,6 +39,7 @@ class PlexSubManager(object):
         self._subs = dict()
         self._is_playing = Event()
         self.config = get_config()
+        self._logger = get_logger(self.__class__.__name__)
         self._register_xbmc_callbacks()
 
     def __del__(self):
@@ -52,15 +55,18 @@ class PlexSubManager(object):
         self._xbmc.rpc.register('Player.OnStop', self._notify_playback_stopped)
 
     def _notify_all_blocking_loop(self, msg=None):
-        # we were just notified for playback, set flag as true
+        if self._is_playing.is_set() is True:
+            # there is already another annoying thread running!
+            return
+
         self._is_playing.set()
-        print 'Annoying thread started!!'
+        self._logger.debug('Annoying thread started!!')
         # each callback is called with its own `disposable` thread
         # we will abuse this and block it untill playback is stopped
         while self._is_playing.is_set() is True:
             self.notify_all(msg)
             time.sleep(1)
-        print 'Annoying thread stopped!'
+        self._logger.debug('Annoying thread stopped!')
 
     def _notify_playback_stopped(self, msg=None):
         self._is_playing.clear()
@@ -100,6 +106,8 @@ class PlexSubManager(object):
     def remove(self, uuid):
         with self._lock:
             sub = self._subs[uuid]
+            name = sub.headers.get('x-plex-device-name', '')
+            self._plex.xbmc.notify('Plex', '%s disconnected' % (name, ))
             del self._subs[uuid]
             del sub
 
@@ -109,6 +117,9 @@ class PlexSubManager(object):
 
     def notify_server(self):
         players = self._xbmc.get_active_players()
+        if players is None:
+            return
+
         for player in players:
             player_id = int(player['playerid'])
             player_type = PlayerType(player['type'])
@@ -119,7 +130,7 @@ class PlexSubManager(object):
                 get = Request(url, headers=self._plex.headers)
                 resp = urlopen(get).read()
             except Exception as e:
-                print 'caught %s while getting to %s' % (str(e), url)
+                self._logger.warn('caught %s while getting to %s' % (str(e), url))
 
     def notify_subscribers(self):
         state = self._xbmc.get_players_state()
@@ -133,4 +144,4 @@ class PlexSubManager(object):
                     post = Request(url, data=xml, headers=self._plex.headers)
                     resp = urlopen(post).read()
                 except Exception as e:
-                    print 'caught %s while posting to %s' % (str(e), url)
+                    self._logger.warn('caught %s while posting to %s' % (str(e), url))

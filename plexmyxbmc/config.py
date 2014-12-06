@@ -4,6 +4,7 @@ import json
 import os
 import uuid
 from threading import Lock
+from plexmyxbmc.log import get_logger
 
 
 class ConfigurationError(Exception):
@@ -14,13 +15,14 @@ class Configuration(dict):
     def __init__(self, path):
         self.path = path
         self.lock = Lock()
+        self._logger = get_logger(self.__class__.__name__)
         if os.path.isfile(path):
             try:
                 self.lock.acquire()
                 fp = open(self.path, 'rb')
                 config = json.load(fp)
             except:
-                print('config file %s could not be read, using defaults')
+                self._logger.info('config file %s could not be read, using defaults')
                 config = dict()
             finally:
                 self.lock.release()
