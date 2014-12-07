@@ -7,12 +7,16 @@ plexapi.X_PLEX_PROVIDES = 'player,controller,sync-target'
 plexapi.X_PLEX_PRODUCT = "PlexMyXBMC"
 plexapi.X_PLEX_VERSION = __version__
 plexapi.X_PLEX_IDENTIFIER = get_config().get('uuid', 'randomuuid')
+plexapi.X_PLEX_PLATFORM_VERSION = plexapi.X_PLEX_PLATFORM + plexapi.X_PLEX_PLATFORM_VERSION
+plexapi.X_PLEX_PLATFORM = 'Generic'
 BASE_HEADERS = {
     'X-Plex-Provides': plexapi.X_PLEX_PROVIDES,
     'X-Plex-Product': plexapi.X_PLEX_PRODUCT,
     'X-Plex-Version': plexapi.X_PLEX_VERSION,
     'X-Plex-Client-Identifier': plexapi.X_PLEX_IDENTIFIER,
     'X-Plex-Device-Name': get_config().get('name', 'randomname'),
+    'X-Plex-Platform': plexapi.X_PLEX_PLATFORM,
+    'X-Plex-Platform-Version': plexapi.X_PLEX_PLATFORM_VERSION,
 }
 
 plexapi.BASE_HEADERS.update(BASE_HEADERS)

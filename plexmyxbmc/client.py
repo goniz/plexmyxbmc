@@ -1,5 +1,7 @@
 #!/usr/bin/python2
 from threading import Lock, Event
+import requests
+import socket
 import plexapi
 from plexapi.myplex import MyPlexUser
 from plexapi.exceptions import NotFound
@@ -14,6 +16,7 @@ from plexmyxbmc.subscription import PlexSubManager
 from plexmyxbmc.threads import ThreadMonitor
 from plexmyxbmc.event_processing import PlexEventsManager
 from plexmyxbmc.log import get_logger
+from plexmyxbmc.sync import PlexSyncManager
 
 
 class PlexClient(object):
@@ -38,6 +41,7 @@ class PlexClient(object):
         self.event_mgr = PlexEventsManager(self)
         self.httpd = ThreadedAPIServer(self, ('', self.config['port']), PlexClientHandler)
         self.httpd.allow_reuse_address = True
+        self.sync_mgr = PlexSyncManager(self)
         self._keep_running = Event()
         self._keep_running.clear()
         self._lock = Lock()
@@ -53,6 +57,8 @@ class PlexClient(object):
     def serve(self):
         self.registration_thread.start()
         self.event_mgr.start()
+        self.sync_mgr.start()
+        self.publish_resources()
         self._keep_running.set()
         try:
             self._serve_loop()
@@ -64,6 +70,7 @@ class PlexClient(object):
         self.registration_thread.stop()
         self.event_mgr.stop()
         self._xbmc_rpc.stop()
+        self.sync_mgr.stop()
         # self._monitor.stop()
 
     def join(self):
@@ -73,6 +80,8 @@ class PlexClient(object):
             self._monitor.join()
         if self.event_mgr.isAlive():
             self.event_mgr.join()
+        if self.sync_mgr.isAlive():
+            self.sync_mgr.join()
 
     def get_coolest_server(self):
         servers = self._user.servers()
@@ -125,3 +134,18 @@ class PlexClient(object):
     def xbmc(self):
         return self._xbmc
 
+    @property
+    def local_address(self):
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(('www.google.com', 80))
+        addr, port = s.getsockname()
+        s.close()
+        return addr, self.config['port']
+
+    def publish_resources(self):
+        addr, port = self.local_address
+        connection = 'http://{0}:{1}/'.format(addr, port)
+        data = {'Connection[][uri]': connection}
+        url = 'https://plex.tv/devices/{0}'.format(self.config['uuid'])
+        resp = requests.put(url, data=data, headers=self.headers)
+        self._logger.info('publish device to plex.tv: {0}'.format(resp.status_code))

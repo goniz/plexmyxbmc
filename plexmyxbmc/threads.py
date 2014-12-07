@@ -17,7 +17,6 @@ class ThreadMonitor(threading.Thread):
     def stop(self):
         self._logger.debug('signalling monitor to stop')
         self._keep_running.clear()
-        self.join()
 
     def run(self):
         while self._keep_running.is_set() is True:

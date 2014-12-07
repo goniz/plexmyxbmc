@@ -246,7 +246,12 @@ class PlexClientHandler(BaseHTTPRequestHandler):
             params[key] = paramarrays[key][0]
 
         if request_path not in __ROUTES_SHUTUP__:
-            PlexClientHandler._logger.info("request /%s args %s" % (request_path, params))
+            PlexClientHandler._logger.info('{0}:{1} request /{2} args {3}'.format(
+                self.client_address[0],
+                self.client_address[1],
+                request_path,
+                params
+            ))
 
         handler = __ROUTES__.get(request_path)
         if handler is None:
