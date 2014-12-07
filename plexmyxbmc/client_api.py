@@ -18,7 +18,15 @@ __ROUTES_SHUTUP__ = list()
 
 
 def route(uri, quite=False):
+    """
+    :type quite: bool
+    :type uri: str
+    """
+
     def route_wrapper(func):
+        """
+        :type func: object
+        """
         global __ROUTES_SHUTUP__
         __ROUTES__[uri] = func
         if quite is True:
@@ -32,12 +40,22 @@ class ThreadedAPIServer(ThreadingMixIn, HTTPServer):
     daemon_threads = True
 
     def __init__(self, plex_client, addr, handler_class, bind_and_activate=True):
+        """
+        :type bind_and_activate: bool
+        :type handler_class: PlexClientHandler
+        :type addr: tuple
+        :type plex_client: PlexClient
+        """
         self.config = get_config()
         self._ok_msg = dict2xml_withheader(dict(code='200', status='OK'), root_node='Response')
         self.plex = plex_client
         HTTPServer.__init__(self, addr, handler_class, bind_and_activate)
 
     def update_command_id(self, req, params):
+        """
+        :type params: dict
+        :type req: PlexClientHandler
+        """
         uuid = req.headers.get('X-Plex-Client-Identifier', "")
         command_id = params.get('commandID', 0)
         sub = self.plex.sub_mgr.get(uuid, None)
@@ -46,6 +64,11 @@ class ThreadedAPIServer(ThreadingMixIn, HTTPServer):
 
     @route('resources')
     def handle_resources(self, request, path, params):
+        """
+        :type params: dict
+        :type path: str
+        :type request: PlexClientHandler
+        """
         resp = {
             "Player": {
                 "title": self.config['name'],
@@ -67,6 +90,11 @@ class ThreadedAPIServer(ThreadingMixIn, HTTPServer):
 
     @route('player/timeline/subscribe')
     def handle_timeline_subscribe(self, request, path, params):
+        """
+        :type params: dict
+        :type path: str
+        :type request: PlexClientHandler
+        """
         assert 'http' == params.get('protocol'), 'http is the only protocol supported'
         host = request.client_address[0]
         port = int(params.get('port', 32400))
@@ -79,6 +107,11 @@ class ThreadedAPIServer(ThreadingMixIn, HTTPServer):
 
     @route('player/timeline/unsubscribe')
     def handle_timeline_unsubscribe(self, request, path, params):
+        """
+        :type params: dict
+        :type path: str
+        :type request: PlexClientHandler
+        """
         uuid = request.headers.get('X-Plex-Client-Identifier', "")
         self.update_command_id(request, params)
         self.plex.sub_mgr.remove(uuid)
@@ -86,6 +119,11 @@ class ThreadedAPIServer(ThreadingMixIn, HTTPServer):
 
     @route('player/timeline/poll', quite=True)
     def handle_timeline_poll(self, request, path, params):
+        """
+        :type params: dict
+        :type path: str
+        :type request: PlexClientHandler
+        """
         # defaults to '0' if 'wait' doesnt exist
         if params.get('wait', '0') == '1':
             time.sleep(1)
@@ -99,6 +137,11 @@ class ThreadedAPIServer(ThreadingMixIn, HTTPServer):
 
     @route('player/playback/playMedia')
     def handle_play_media(self, request, path, params):
+        """
+        :type params: dict
+        :type path: str
+        :type request: PlexClientHandler
+        """
         assert 'key' in params, 'a media key is a must'
         key = params.get('key')
         offset = int(params.get('offset', 0))
@@ -112,6 +155,11 @@ class ThreadedAPIServer(ThreadingMixIn, HTTPServer):
 
     @route('player/playback/stop')
     def handle_player_stop(self, request, path, params):
+        """
+        :type params: dict
+        :type path: str
+        :type request: PlexClientHandler
+        """
         self.update_command_id(request, params)
 
         self.plex.event_mgr.schedule(self.plex.xbmc.stop, tuple())
@@ -119,6 +167,11 @@ class ThreadedAPIServer(ThreadingMixIn, HTTPServer):
 
     @route('player/playback/setParameters')
     def handle_playback_set_parameters(self, request, path, params):
+        """
+        :type params: dict
+        :type path: str
+        :type request: PlexClientHandler
+        """
         self.update_command_id(request, params)
         if 'volume' in params:
             self.plex.xbmc.volume = int(params['volume'])
@@ -127,6 +180,11 @@ class ThreadedAPIServer(ThreadingMixIn, HTTPServer):
     @route('player/playback/pause')
     @route('player/playback/play')
     def handle_playback_pause(self, request, path, params):
+        """
+        :type params: dict
+        :type path: str
+        :type request: PlexClientHandler
+        """
         self.update_command_id(request, params)
         state = True if path.endswith('play') else False
 
@@ -135,6 +193,11 @@ class ThreadedAPIServer(ThreadingMixIn, HTTPServer):
 
     @route('player/playback/seekTo')
     def handle_playback_seekto(self, request, path, params):
+        """
+        :type params: dict
+        :type path: str
+        :type request: PlexClientHandler
+        """
         self.update_command_id(request, params)
         offset = int(params.get('offset', 0))
 
@@ -146,6 +209,11 @@ class ThreadedAPIServer(ThreadingMixIn, HTTPServer):
     @route('player/playback/skipNext')
     @route('player/playback/skipPrevious')
     def handle_playback_step(self, request, path, params):
+        """
+        :type params: dict
+        :type path: str
+        :type request: PlexClientHandler
+        """
         self.update_command_id(request, params)
         value = path.split('/')[-1]
 
@@ -161,6 +229,11 @@ class ThreadedAPIServer(ThreadingMixIn, HTTPServer):
     @route("player/navigation/home")
     @route("player/navigation/back")
     def handle_navigation(self, request, path, params):
+        """
+        :type params: dict
+        :type path: str
+        :type request: PlexClientHandler
+        """
         value = path.split('/')[-1]
 
         self.plex.event_mgr.schedule(self.plex.xbmc.navigate, (value, ))

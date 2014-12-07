@@ -1,5 +1,5 @@
-* Fix broken web client playback
-* make sure it works both on web client and android
+* make play_key + play_video PlexSyncManager aware and serve local content when available (!!!)
+* proper empty dirs cleanup in PlexStorageManager
 * PIN code signin instead of SAVING THE PASSWORD TO DISK (!)
 * fix invalid (?) playQueue
 * Subtitle support

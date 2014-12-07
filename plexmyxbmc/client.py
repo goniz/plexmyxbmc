@@ -16,7 +16,7 @@ from plexmyxbmc.subscription import PlexSubManager
 from plexmyxbmc.threads import ThreadMonitor
 from plexmyxbmc.event_processing import PlexEventsManager
 from plexmyxbmc.log import get_logger
-from plexmyxbmc.sync import PlexSyncManager
+from plexmyxbmc.sync import PlexSyncManager, PlexStorageManager
 
 
 class PlexClient(object):
@@ -41,7 +41,8 @@ class PlexClient(object):
         self.event_mgr = PlexEventsManager(self)
         self.httpd = ThreadedAPIServer(self, ('', self.config['port']), PlexClientHandler)
         self.httpd.allow_reuse_address = True
-        self.sync_mgr = PlexSyncManager(self)
+        self.storage_mgr = PlexStorageManager(self.config['local_sync_cache'])
+        self.sync_mgr = PlexSyncManager(self, self.storage_mgr)
         self._keep_running = Event()
         self._keep_running.clear()
         self._lock = Lock()
@@ -105,6 +106,10 @@ class PlexClient(object):
         raise NotFound()
 
     def authenticated_url(self, url):
+        """
+
+        :type url: str
+        """
         url = self._server.url(url) if url.startswith('/') else url
         token = 'X-Plex-Token=' + self._user.authenticationToken
         return url + ('&' if '?' in url else '?') + token

@@ -53,6 +53,9 @@ class Configuration(dict):
             self['xbmc_username'] = 'xbmc'
         if self.get('xbmc_password') is None:
             self['xbmc_password'] = 'xbmc'
+        if self.get('local_sync_cache') is None:
+            self['local_sync_cache'] = os.path.join(os.environ['HOME'], '.plexmyxbmc_sync')
+
         if not 'plex_username' in self or not 'plex_password' in self:
             self.commit()
             raise ConfigurationError('missing plex_username or plex_password')

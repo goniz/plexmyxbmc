@@ -87,7 +87,7 @@ class XbmcJSONRPC(XbmcRPC):
                     continue
             self._socket.close()
             self._alive.clear()
-            self._logger.inof('XBMC Disconnected')
+            self._logger.info('XBMC Disconnected')
             raise InvalidRPCConnection()
 
     def stop(self):
