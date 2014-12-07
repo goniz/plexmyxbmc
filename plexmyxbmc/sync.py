@@ -28,12 +28,12 @@ class LocalSyncItem(object):
         :type part: MediaPart
         :type dirname: str
         """
-        lname = '{0}-{1}'.format(self.__class__.__name__, self._part.sync_id)
-        self._logger = get_logger(lname)
         self._base_dir = dirname
         self._part = part
         self._video = video
         self._metadata = self._load_meta()
+        lname = '{0}-{1}'.format(self.__class__.__name__, self._part.sync_id)
+        self._logger = get_logger(lname)
         self.save()
 
     @property
