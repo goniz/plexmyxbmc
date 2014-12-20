@@ -1,15 +1,16 @@
 #!/usr/bin/python2
-from threading import Thread, Event, Timer
+from threading import Thread, Event, Timer, Lock
 from Queue import Queue
 import os
 import json
 import urllib2
 import shutil
-from plexapi.video import Video
-from plexapi.media import MediaPart
+import hashlib
 from plexmyxbmc.log import get_logger
 from plexmyxbmc.config import get_config
-
+from plexmyxbmc.exceptions import DownloadInterruptedError
+from plexapi.exceptions import NotFound
+import plexapi
 
 class ThreadStopRequest(object):
     pass
@@ -31,10 +32,10 @@ class LocalSyncItem(object):
         self._base_dir = dirname
         self._part = part
         self._video = video
-        self._metadata = self._load_meta()
-        lname = '{0}-{1}'.format(self.__class__.__name__, self._part.sync_id)
+        lname = '{0}-{1}'.format(self.__class__.__name__, self._part.id)
         self._logger = get_logger(lname)
-        self.save()
+        self._metadata = self._load_meta()
+        self.save() 
 
     @property
     def metadata_filename(self):
@@ -63,6 +64,17 @@ class LocalSyncItem(object):
         :return: int
         """
         return self._part.size
+    
+    @property
+    def done(self):
+        """
+        :return: bool
+        """
+        return self.metadata.get('done', False)
+    
+    @done.setter
+    def done(self, d):
+        self.metadata['done'] = d
 
     def save(self):
         with open(self.metadata_filename, 'wb') as f:
@@ -88,8 +100,37 @@ class LocalSyncItem(object):
             meta['show'] = self._video.grandparentTitle
         if 'title' not in meta:
             meta['title'] = self._video.title
+        if 'season' not in meta:
+            meta['season'] = int(self._video.parentIndex)
+        if 'episode' not in meta:
+            meta['episode'] = int(self._video.index)
+        if 'total_size' not in meta:
+            meta['total_size'] = self.remote_size
+        if 'video.key' not in meta:
+            meta['video.key'] = int(str(self._video.key).split('/')[-1])
+        if 'part.id' not in meta:
+            meta['part.id'] = self._part.id
+        if 'part.syncId' not in meta:
+            if not hasattr(self._part, 'sync_id') or int(self._part.sync_id) <= 0:
+                raise ValueError('{0}:{1} - Expected valid sync_id for media part. found {2}'.format(self._video.key, self._part.id, self._part.sync_id))
+            meta['part.syncId'] = self._part.sync_id
+
+        if not hasattr(self._part, 'sync_id') or int(self._part.sync_id) <= 0:
+            setattr(self._part, 'sync_id', self.metadata['part.SyncId'])
 
         return meta
+    
+    def __str__(self):
+        desc = ''
+        if 'title' in self.metadata:
+            desc = self.metadata['title']
+        if 'season' in self.metadata and 'episode' in self.metadata:
+            desc = 'S%02dE%02d' % (self.metadata['season'], self.metadata['episode'])
+            
+        return '<{0}:{1}:{2}:{3}MB>'.format(self.__class__.__name__,
+                                          self.metadata['show'],
+                                          desc,
+                                          int(int(self.metadata['total_size'])/1024.0/1024.0))
 
     def current_filesize(self):
         """
@@ -118,20 +159,23 @@ class LocalSyncItem(object):
         return urllib2.urlopen(request, timeout=timeout)
 
     def reset(self):
-        os.unlink(self.filename)
-        self.metadata['done'] = False
+        if os.path.exists(self.filename):
+            os.unlink(self.filename)
+        self.done = False
         self.save()
 
     def delete(self):
         self.reset()
         shutil.rmtree(self._base_dir)
 
-    def download_part(self, url):
+    def download_part(self, url, _interrupt_event=None):
         """
         :param url: str
+        :param _interrupt_event: Event
         :return: None
         """
-        if self.metadata['done'] is True:
+        _interrupt_event = Event() if _interrupt_event is None else _interrupt_event
+        if self.done is True:
             return
 
         file_offset = self.current_filesize()
@@ -141,34 +185,70 @@ class LocalSyncItem(object):
             self._logger.info('found inconsistency in file sizes, resetting local file')
 
         if file_offset == self.remote_size:
-            self.metadata['done'] = True
+            self.done = True
             return
 
         file_stream = self.writable_stream()
         remote_stream = self.url_to_stream(url, LocalSyncItem.READ_TIMEOUT)
-        while True:
-            chunk = remote_stream.read(4096)
-            if not chunk:
-                self.metadata['done'] = True
-                self._logger.info('finished downloading part')
-                break
+        current = self.current_filesize()
+        self._logger.info('Downloading item, total size: %d MB, remaining size %d MB',
+                          self.remote_size/1024/1024.0,
+                          self.download_size_left(current)/1024/1024.0)
 
-            file_stream.write(chunk)
-            file_stream.flush()
+        last_progress = self.download_progress(current, int)
+        try:
+            while _interrupt_event.is_set() is True:
+                chunk = remote_stream.read(4 * 1024 * 1024)
+                if not chunk:
+                    self.done = True
+                    self._logger.info('finished downloading part')
+                    break
+
+                file_stream.write(chunk)
+
+                current = file_stream.tell()
+                progress = self.download_progress(current, int)
+                if last_progress != progress:
+                    last_progress = progress
+                    self._logger.debug('Download progress %3d%%, left %d MB',
+                                       progress,
+                                       self.download_size_left(current)/1024/1024.0)
+        except Exception as e:
+            self.__logger.warn(str(e))
 
         remote_stream.close()
         file_stream.flush()
         file_stream.close()
         self.save()
 
+        if _interrupt_event.is_set() is False:
+            raise DownloadInterruptedError('Download interrupted by user event.')
+
+    def download_progress(self, current_size=None, cast=float):
+        current_size = self.current_filesize() if current_size is None else current_size
+        current = float(current_size)
+        total = float(self.remote_size)
+        progress = (current / total) * 100.0
+        return cast(progress)
+
+    def download_size_left(self, current_size=None):
+        current_size = self.current_filesize() if current_size is None else current_size
+        return self.remote_size - current_size
+
 
 class PlexStorageManager(object):
-    def __init__(self, base_dir):
+    def __init__(self, plex_client, base_dir):
         """
+        :type plex_client: PlexClient
         :type base_dir: str
         """
+        self._plex = plex_client
         self._base = os.path.join(base_dir, 'sync')
+        self._items_cache = dict()
+        self._lock = Lock()
+        self._logger = get_logger(self.__class__.__name__)
         self.mkdir_p(self._base)
+        self._load_cached_items()
 
     @property
     def base_dir(self):
@@ -178,20 +258,132 @@ class PlexStorageManager(object):
         if not os.path.exists(path):
             os.makedirs(path)
 
+    def _local_sync_item_from_metadata(self, meta):
+        if isinstance(meta, file):
+            meta = json.load(file)
+        elif isinstance(meta, (str, unicode)):
+            meta = json.load(open(meta, 'rb'))
+        elif isinstance(meta, dict):
+            pass
+        else:
+            raise TypeError('Expected file, (str, unicode) filename, or a dict. found {0}'.format(type(meta)))
+        
+        assert 'video.key' in meta
+        assert 'part.id' in meta
+        assert 'part.syncId' in meta
+        
+        server = self._plex.server
+        key = '/library/metadata/{0}'.format(meta['video.key'])
+        part_id = meta['part.id']
+        video = plexapi.video.list_items(server, key, plexapi.video.Episode.TYPE)
+        if not video:
+            raise NotFound('Could not find video in library: {0}'.format(key))
+
+        video = video[0]
+        for part in video.iter_parts():
+            if str(part.id) == str(part_id):
+                part.sync_id = meta['part.syncId']
+                return self.local_sync_item(video, part)
+        raise NotFound('Could not find video+part combo in library: {0}:{1}'.format(key, part_id))
+                
+            
+    def _load_cached_items(self):
+        for server in os.listdir(self.base_dir):
+            server = os.path.join(self.base_dir, server)
+            sync_ids = os.path.join(server, 'library/parts')
+            for sync_id in os.listdir(sync_ids):
+                sync_id = os.path.join(sync_ids, sync_id)
+                parts = os.listdir(sync_id)
+                if len(parts) == 0:
+                    try:
+                        self._logger.debug('removing empty dir %s', sync_id.replace(self.base_dir, '').lstrip('/'))
+                        os.rmdir(sync_id)
+                    except OSError as e:
+                        self._logger.warn(str(e))
+                    continue
+                    
+                for part_id in parts:
+                    part_id = os.path.join(sync_id, part_id)
+                    meta = os.path.join(part_id, 'metadata.json')
+                    
+                    if not os.path.exists(meta):
+                        try:
+                            self._logger.debug('removing empty dir %s', part_id.replace(self.base_dir, '').lstrip('/'))
+                            os.rmdir(part_id)
+                        except OSError as e:
+                            self._logger.warn(str(e))
+                        continue
+
+                    try:
+                        self._local_sync_item_from_metadata(meta)
+                    except NotFound as e:
+                        self._logger.warn(str(e))
+        self._logger.info('loaded %d cache entries', len(self._items_cache))
+    
+    def _gen_cache_hash(self, video_key, part_id):
+        try:
+            video_key = int(str(video_key).split('/')[-1])
+        except Exception as e:
+            self._logger.warn('failed to understand video_key when generating hash: %s', str(e))
+            raise
+        
+        item_hash = hashlib.sha1()
+        item_hash.update(str(video_key))
+        item_hash.update(str(part_id))
+        return item_hash.digest()
+    
+    def _gen_cache_hash_by_item(self, item):
+        return self._gen_cache_hash(item._video.key, item._part.id)
+            
+    def get_cached_item(self, video, part):
+        item_hash = self._gen_cache_hash(video.key, part.id)
+        with self._lock:
+            return self._items_cache.get(item_hash, None)
+        
+    def set_cached_item(self, item):
+        item_hash = self._gen_cache_hash_by_item(item)
+        with self._lock:
+            self._items_cache[item_hash] = item
+        return item_hash
+    
+    def del_cached_item(self, item):
+        item_hash = self._gen_cache_hash_by_item(item)
+        with self._lock:
+            del self._items_cache[item_hash]
+        return item_hash
+
     def local_sync_item(self, video, part):
         """
         :type part: MediaPart
         :type video: Video
         """
+        cached_item = self.get_cached_item(video, part)
+        if cached_item:
+            return cached_item
+        
         server = video.server
         dirname = '{0}/library/parts/{1}/{2}'.format(server.machineIdentifier, part.sync_id, part.id)
         dirname = os.path.join(self._base, dirname)
         self.mkdir_p(dirname)
-        return LocalSyncItem(video, part, dirname)
+        item = LocalSyncItem(video, part, dirname)
+        self.set_cached_item(item)
+        return item
 
-    def cleanup(self):
-        #os.removedirs(self._base)
-        pass
+    def cleanup(self, recents):
+        used = recents
+        total = self._items_cache.values()
+        unused = [x for x in total if x not in used]
+        
+        self._logger.info('Found %d unused items', len(unused))
+        for item in unused:
+            self._logger.debug('Removing unused item: %s - %s (%d MB)',
+                               item.metadata['show'],
+                               item.metadata['title'],
+                               item.current_filesize()/1024.0/1024.0)
+            item.delete()
+            self.del_cached_item(item)
+            del item
+        self._logger.info('Removed %d unused items', len(unused))
 
     def get_size_left(self):
         st = os.statvfs(self._base)
@@ -202,10 +394,12 @@ class PlexStorageManager(object):
 
 
 class PlexSyncManager(Thread):
-    # initial delay set to 60 seconds
-    INITIAL_DELAY = 10
-    # interval between syncs iterations set to 30 minutes
-    SYNC_INTERVAL = 60 * 1
+    # initial delay set to 5 seconds
+    INITIAL_DELAY = 5
+    # interval between syncs iterations set to 15 minutes
+    SYNC_INTERVAL = 60 * 15
+    # a lower interval to set when an error occurred
+    ERROR_SYNC_INTERVAL = 60
 
     def __init__(self, plex_client, storage_mgr):
         """
@@ -234,15 +428,18 @@ class PlexSyncManager(Thread):
                     self._logger.debug('invalid trigger found {0}'.format(type(trigger)))
                     continue
 
-                self._logger.info('got SyncRequest, activating')
+                self._logger.info('SyncRequest() --> Running PlexSync job')
                 self._clear_timer()
-                self._storage.cleanup()
                 recents = self._handle_sync_operation()
-                self._remove_unused(recents)
+                self._storage.cleanup(recents)
+                self._logger.info('Finished PlexSync job')
+
+                # if necessary, set a
+                if self._keep_running.is_set() is True:
+                    self._schedule_sync_request(PlexSyncManager.SYNC_INTERVAL)
             except Exception as e:
                 self._logger.warn(str(e))
-            finally:
-                self._schedule_sync_request(PlexSyncManager.SYNC_INTERVAL)
+                self._schedule_sync_request(PlexSyncManager.ERROR_SYNC_INTERVAL)
         self._clear_timer()
 
     def _clear_timer(self):
@@ -264,14 +461,14 @@ class PlexSyncManager(Thread):
             media = item.get_media()
             for m in media:
                 for part in m.iter_parts():
-                    self._logger.debug('Found part %s - %s', m.grandparentTitle, part.id)
-                    recents.append((m.server.machineIdentifier, part.sync_id, part.id))
-
                     url = self._plex.authenticated_url(m.server.url(part.key))
                     local_item = self._storage.local_sync_item(m, part)
-                    local_item.download_part(url)
+                    recents.append(local_item)
 
-                    if local_item.metadata['done'] is True and local_item.metadata['reported'] is False:
+                    self._logger.info('Found part %s', str(local_item))
+                    local_item.download_part(url, _interrupt_event=self._keep_running)
+
+                    if local_item.done is True and local_item.metadata['reported'] is False:
                         item.mark_as_done(part.sync_id)
                         local_item.metadata['reported'] = True
                         local_item.save()
@@ -286,29 +483,9 @@ class PlexSyncManager(Thread):
         def __trigger_sync_request():
             self._queue.put(SyncRequest())
 
-        self._last_timer = Timer(seconds, __trigger_sync_request)
-        self._last_timer.start()
+        if self._keep_running.is_set() is True:
+            self._last_timer = Timer(seconds, __trigger_sync_request)
+            self._last_timer.start()
+            self._logger.debug('Rescheduled another job that will launch in %d min', seconds/60.0)
+
         return self._last_timer
-
-    def _remove_unused(self, recents):
-        paths = ['{0}/library/parts/{1}/{2}'.format(uuid, sync_id, part_id) for uuid, sync_id, part_id in recents]
-
-        count = 0
-        for server in os.listdir(self._storage.base_dir):
-            server = os.path.join(self._storage.base_dir, server)
-            sync_ids = os.path.join(server, 'library/parts')
-            for sync_id in os.listdir(sync_ids):
-                sync_id = os.path.join(sync_ids, sync_id)
-                for part_id in os.listdir(sync_id):
-                    part_id = os.path.join(sync_id, part_id)
-
-                    path = part_id.replace(self._storage.base_dir, '').lstrip('/')
-                    if path not in paths:
-                        self._logger.warn('Removing unused sync items: %s', path)
-                        try:
-                            shutil.rmtree(part_id)
-                        except OSError as e:
-                            self._logger.warn('_remove_unused: %s', str(e))
-                        count += 1
-        self._logger.debug('removed %d unused items', count)
-        return count

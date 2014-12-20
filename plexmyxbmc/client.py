@@ -34,14 +34,19 @@ class PlexClient(object):
         self.xbmc.notify('Plex', 'PlexMyXBMC Connected')
         self._user = MyPlexUser(self.config['plex_username'], self.config['plex_password'])
         self.xbmc.notify('Plex', 'Logged in as "%s"' % self.config['plex_username'])
-        self.xbmc.notify('Plex', 'Searching for connectable servers...', duration=10*1000)
-        self._server = self.get_coolest_server()
-        self.xbmc.notify('Plex', 'using PMS %s' % self._server.friendlyName)
+        self.xbmc.notify('Plex', 'Master server is {0}'.format(self.config['plex_server']))
+        try:
+            self._server = self.get_coolest_server()
+            self.xbmc.notify('Plex', 'using PMS %s' % self._server.friendlyName)
+        except:
+            self.xbmc.notify('Plex', 'failed to connect to master server')
+            raise
+
         self.sub_mgr = PlexSubManager(self)
         self.event_mgr = PlexEventsManager(self)
         self.httpd = ThreadedAPIServer(self, ('', self.config['port']), PlexClientHandler)
         self.httpd.allow_reuse_address = True
-        self.storage_mgr = PlexStorageManager(self.config['local_sync_cache'])
+        self.storage_mgr = PlexStorageManager(self, self.config['local_sync_cache'])
         self.sync_mgr = PlexSyncManager(self, self.storage_mgr)
         self._keep_running = Event()
         self._keep_running.clear()
@@ -86,24 +91,15 @@ class PlexClient(object):
 
     def get_coolest_server(self):
         servers = self._user.servers()
-        servers = map(MyPlexServer, servers)
         self._logger.info('MyPlex registered servers: %s', ', '.join(map(lambda x: x.name, servers)))
 
-        local_servers = map(lambda x: x.connect_local(), servers)
-        local_servers = filter(None, local_servers)
-        if local_servers:
-            self._logger.info('Found %d local Plex Media Servers' % len(local_servers))
-            self._logger.info('Chose first local server: %s', local_servers[0].friendlyName)
-            return local_servers[0]
+        master_server = self.config.get('plex_server', '')
+        for server in servers:
+            if server.name != master_server:
+                continue
 
-        external_servers = map(lambda x: x.connect_external(), servers)
-        external_servers = filter(None, external_servers)
-        if external_servers:
-            self._logger.info('Found %d external Plex Media Servers' % len(external_servers))
-            self._logger.info('Chose first external server: %s', external_servers[0].friendlyName)
-            return external_servers[0]
-
-        raise NotFound()
+            return MyPlexServer(server).connect()
+        raise NotFound('could not find master server {0}'.format(master_server))
 
     def authenticated_url(self, url):
         """
@@ -153,4 +149,7 @@ class PlexClient(object):
         data = {'Connection[][uri]': connection}
         url = 'https://plex.tv/devices/{0}'.format(self.config['uuid'])
         resp = requests.put(url, data=data, headers=self.headers)
-        self._logger.info('publish device to plex.tv: {0}'.format(resp.status_code))
+        if resp.status_code == 200:
+            self._logger.info('published device resources to plex.tv successfully')
+        else:
+            self._logger.warn('failed to publish devices resources to plex.tv')

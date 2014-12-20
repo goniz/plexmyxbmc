@@ -2,10 +2,7 @@
 from threading import Thread
 from Queue import Queue
 from plexmyxbmc.log import get_logger
-
-
-class ThreadStopError(Exception):
-    pass
+from plexmyxbmc.exceptions import ThreadStopError
 
 
 class PlexEvent(object):

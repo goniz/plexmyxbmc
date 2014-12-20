@@ -153,6 +153,9 @@ class XBMCPlexPlayer(XBMC):
 
     def get_timeline(self, playerid, playertype):
         timeline = dict(type=playertype.plex)
+        vid = self.metadata.get('video', None)
+        container_key = self.metadata.get('containerKey', None)
+        
         if playerid > 0:
             prop = self.get_player_properties(playerid)
             timeline.update(prop)
@@ -161,7 +164,6 @@ class XBMCPlexPlayer(XBMC):
             timeline['guid'] = ''
             timeline['machineIdentifier'] = self.metadata.get('machineIdentifier', '')
 
-            vid = self.metadata.get('video', None)
             if vid is not None:
                 timeline['address'] = vid.server.address
                 timeline['port'] = str(vid.server.port)
@@ -170,11 +172,12 @@ class XBMCPlexPlayer(XBMC):
                 timeline['ratingKey'] = vid.ratingKey
                 timeline['subtitleStreamID'] = '-1'
 
-            container_key = self.metadata.get('containerKey', None)
-            if video is not None:
+            if container_key is not None:
                 timeline['containerKey'] = container_key
                 timeline['playQueueID'] = container_key.strip().split('/')[-1]
         else:
+            if vid is not None:
+                timeline['key'] = vid.key
             timeline['state'] = 'stopped'
             timeline['time'] = 0
         return timeline
@@ -209,7 +212,23 @@ class XBMCPlexPlayer(XBMC):
             raise Exception(video)
 
         media_part = media_parts[0]
-        url = self._plex.authenticated_url(media_part.key)
+        cached_item = self._plex.storage_mgr.get_cached_item(video, media_part)
+        if cached_item:
+            self._logger.info('found cached media part %s', str(cached_item))
+        else:
+            self._logger.info('did not find media part in local cache, playing from remote server')
+
+        if cached_item and cached_item.done is True:
+            # assumes XBMC is running on the same host as this PMX
+            # will implement this via the embedded HTTP server to allow
+            # this feature to work with remote XBMC
+            url = 'file://{0}'.format(cached_item.filename)
+            self._logger.debug('cached media part is fully downloaded! using local file')
+        else:
+            url = self._plex.authenticated_url(media_part.key)
+            self._logger.debug('Using remote file')
+            
+        self._logger.debug('playing url %s', url)
         self.play_media(url, offset)
         self._metadata['video'] = video
         self._metadata['part'] = media_part

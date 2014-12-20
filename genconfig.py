@@ -14,6 +14,7 @@ def init_argparse():
     parser.add_argument('--xbmc-password', type=str)
     parser.add_argument('--plex-username', type=str)
     parser.add_argument('--plex-password', type=str)
+    parser.add_argument('--plex-server', type=str)
     parser.add_argument('--name', type=str)
     parser.add_argument('--port', type=int)
 
@@ -48,6 +49,8 @@ def main():
         config['plex_username'] = options.plex_username
     if options.plex_password:
         config['plex_password'] = options.plex_password
+    if options.plex_server:
+        config['plex_server'] = options.plex_server
     if options.name:
         config['name'] = options.name
     if options.port:

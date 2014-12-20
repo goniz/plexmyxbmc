@@ -69,8 +69,9 @@ class PlexSubManager(object):
         self._logger.debug('Annoying thread stopped!')
 
     def _notify_playback_stopped(self, msg=None):
-        self._is_playing.clear()
         self.notify_all(msg)
+        time.sleep(3)
+        self._is_playing.clear()
 
     def notify_all(self, msg=None):
         self.notify_server()
@@ -118,7 +119,11 @@ class PlexSubManager(object):
     def notify_server(self):
         players = self._xbmc.get_active_players()
         if players is None:
-            return
+            players = [
+                       dict(playerid=-1, type='audio'),
+                       dict(playerid=-1, type='photo'),
+                       dict(playerid=-1, type='video')
+            ]
 
         for player in players:
             player_id = int(player['playerid'])
