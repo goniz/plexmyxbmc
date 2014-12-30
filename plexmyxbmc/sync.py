@@ -12,6 +12,7 @@ from plexmyxbmc.exceptions import DownloadInterruptedError
 from plexapi.exceptions import NotFound
 import plexapi
 
+
 class ThreadStopRequest(object):
     pass
 
@@ -111,12 +112,12 @@ class LocalSyncItem(object):
         if 'part.id' not in meta:
             meta['part.id'] = self._part.id
         if 'part.syncId' not in meta:
-            if not hasattr(self._part, 'sync_id') or int(self._part.sync_id) <= 0:
-                raise ValueError('{0}:{1} - Expected valid sync_id for media part. found {2}'.format(self._video.key, self._part.id, self._part.sync_id))
-            meta['part.syncId'] = self._part.sync_id
+            if not hasattr(self._part, 'syncId') or int(self._part.syncId) <= 0:
+                raise ValueError('{0}:{1} - Expected valid syncId for media part. found {2}'.format(self._video.key, self._part.id, self._part.syncId))
+            meta['part.syncId'] = self._part.syncId
 
-        if not hasattr(self._part, 'sync_id') or int(self._part.sync_id) <= 0:
-            setattr(self._part, 'sync_id', self.metadata['part.SyncId'])
+        if not hasattr(self._part, 'syncId') or int(self._part.syncId) <= 0:
+            setattr(self._part, 'syncId', self.metadata['part.syncId'])
 
         return meta
     
@@ -214,7 +215,7 @@ class LocalSyncItem(object):
                                        progress,
                                        self.download_size_left(current)/1024/1024.0)
         except Exception as e:
-            self.__logger.warn(str(e))
+            self._logger.warn(str(e))
 
         remote_stream.close()
         file_stream.flush()
@@ -282,17 +283,22 @@ class PlexStorageManager(object):
         video = video[0]
         for part in video.iter_parts():
             if str(part.id) == str(part_id):
-                part.sync_id = meta['part.syncId']
+                part.syncId = meta['part.syncId']
                 return self.local_sync_item(video, part)
         raise NotFound('Could not find video+part combo in library: {0}:{1}'.format(key, part_id))
                 
-            
     def _load_cached_items(self):
         for server in os.listdir(self.base_dir):
             server = os.path.join(self.base_dir, server)
             sync_ids = os.path.join(server, 'library/parts')
+            if not os.path.isdir(sync_ids):
+                continue
+
             for sync_id in os.listdir(sync_ids):
                 sync_id = os.path.join(sync_ids, sync_id)
+                if not os.path.isdir(sync_id):
+                    continue
+
                 parts = os.listdir(sync_id)
                 if len(parts) == 0:
                     try:
@@ -338,7 +344,8 @@ class PlexStorageManager(object):
     def get_cached_item(self, video, part):
         item_hash = self._gen_cache_hash(video.key, part.id)
         with self._lock:
-            return self._items_cache.get(item_hash, None)
+            item = self._items_cache.get(item_hash, None)
+        return item
         
     def set_cached_item(self, item):
         item_hash = self._gen_cache_hash_by_item(item)
@@ -362,7 +369,7 @@ class PlexStorageManager(object):
             return cached_item
         
         server = video.server
-        dirname = '{0}/library/parts/{1}/{2}'.format(server.machineIdentifier, part.sync_id, part.id)
+        dirname = '{0}/library/parts/{1}/{2}'.format(server.machineIdentifier, part.syncId, part.id)
         dirname = os.path.join(self._base, dirname)
         self.mkdir_p(dirname)
         item = LocalSyncItem(video, part, dirname)
@@ -456,9 +463,9 @@ class PlexSyncManager(Thread):
         recents = list()
         uuid = self._config['uuid']
         device = self._plex.user.getDevice(uuid)
-        items = device.sync_items()
+        items = device.syncItems()
         for item in items:
-            media = item.get_media()
+            media = item.getMedia()
             for m in media:
                 for part in m.iter_parts():
                     url = self._plex.authenticated_url(m.server.url(part.key))
@@ -469,10 +476,10 @@ class PlexSyncManager(Thread):
                     local_item.download_part(url, _interrupt_event=self._keep_running)
 
                     if local_item.done is True and local_item.metadata['reported'] is False:
-                        item.mark_as_done(part.sync_id)
+                        item.markAsDone(part.syncId)
                         local_item.metadata['reported'] = True
                         local_item.save()
-                        self._logger.debug('set %d as DONE', part.sync_id)
+                        self._logger.debug('set %d as DONE', part.syncId)
         return recents
 
     def _schedule_sync_request(self, seconds):

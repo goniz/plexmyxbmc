@@ -14,7 +14,7 @@ Dependencies:
 
 	* Python 2.7.*
 	* plexapi:
-			hg clone https://bitbucket.org/mjs7232/plexapi
+			git clone https://github.com/mjs7231/plexapi.git
 	        sudo pip install ./plexapi
 	* Plex Media Server on LAN + Plex Account
 	* XBMC on LAN - HTTP Server enabled
