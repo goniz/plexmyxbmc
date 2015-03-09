@@ -2,6 +2,7 @@
 __version__ = "1.0.0"
 import plexapi
 from plexmyxbmc.config import get_config
+from plexmyxbmc.log import get_logger
 
 plexapi.X_PLEX_PROVIDES = 'player,controller,sync-target'
 plexapi.X_PLEX_PRODUCT = "PlexMyXBMC"
@@ -20,6 +21,8 @@ BASE_HEADERS = {
 }
 
 plexapi.BASE_HEADERS.update(BASE_HEADERS)
+logger = get_logger('plexapi', _force=True)
+plexapi.log = logger
 
 
 def time_to_millis(time):

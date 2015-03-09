@@ -6,3 +6,5 @@
 * PIN code signin instead of SAVING THE PASSWORD TO DISK (!)
 * fix invalid (?) playQueue
 * Subtitle support (find out how to set subtitle via jsonrpc. last resort: tiny xbmc plugin to allow it??)
+* drop my MyPlexServer impl. and use plexapi.MyPlexServer.connect() impl.
+* sort local sync items to be downloaded by download progress --> we should try to FINISH downloading items instead of downloading parts of various items
