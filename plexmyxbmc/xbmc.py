@@ -68,7 +68,7 @@ class XBMC(object):
                 resume=millis_to_time(offset)
             )
         )
-        self._rpc.execute('Player.Open', params)
+        return self._rpc.execute('Player.Open', params)
 
     def stop(self):
         for player in self.get_active_players():
@@ -222,7 +222,8 @@ class XBMCPlexPlayer(XBMC):
             # assumes XBMC is running on the same host as this PMX
             # will implement this via the embedded HTTP server to allow
             # this feature to work with remote XBMC
-            url = 'file://{0}'.format(cached_item.filename)
+            #url = 'file://{0}'.format(cached_item.filename)
+            url = cached_item.filename
             self._logger.debug('cached media part is fully downloaded! using local file')
         else:
             url = self._plex.authenticated_url(media_part.key)
