@@ -199,7 +199,12 @@ class LocalSyncItem(object):
         last_progress = self.download_progress(current, int)
         try:
             while _interrupt_event.is_set() is True:
-                chunk = remote_stream.read(4 * 1024 * 1024)
+                try:
+                    chunk = remote_stream.read(4 * 1024 * 1024)
+                except Exception as e:
+                    self._logger.warn(str(e))
+                    continue
+
                 if not chunk:
                     self.done = True
                     self._logger.info('finished downloading part')
@@ -445,6 +450,7 @@ class PlexSyncManager(Thread):
                 if self._keep_running.is_set() is True:
                     self._schedule_sync_request(PlexSyncManager.SYNC_INTERVAL)
             except Exception as e:
+                self._logger.exception('exception caught in sync request operation')
                 self._logger.warn(str(e))
                 self._schedule_sync_request(PlexSyncManager.ERROR_SYNC_INTERVAL)
         self._clear_timer()
@@ -465,22 +471,37 @@ class PlexSyncManager(Thread):
         device = self._plex.user.getDevice(uuid)
         items = device.syncItems()
         for item in items:
-            media = item.getMedia()
+            media = item.getMedia(server=self._plex.server)
             for m in media:
                 for part in m.iter_parts():
-                    url = self._plex.authenticated_url(m.server.url(part.key))
                     local_item = self._storage.local_sync_item(m, part)
-                    recents.append(local_item)
+                    recents.append((item, local_item))
 
                     self._logger.info('Found part %s', str(local_item))
-                    local_item.download_part(url, _interrupt_event=self._keep_running)
+                    
+        self._logger.info('Fetched %d items to sync', len(recents))
+        for remote_item, local_item in recents:
+            self._logger.info('Downloading %s', str(local_item))
+            url = self._plex.authenticated_url(local_item._video.server.url(local_item._part.key))
+            try:
+                local_item.download_part(url, _interrupt_event=self._keep_running)
+            except Exception as e:
+                continue
 
-                    if local_item.done is True and local_item.metadata['reported'] is False:
-                        item.markAsDone(part.syncId)
-                        local_item.metadata['reported'] = True
-                        local_item.save()
-                        self._logger.debug('set %d as DONE', part.syncId)
-        return recents
+            if local_item.done is True and local_item.metadata['reported'] is False:
+                try:
+                    self._logger.debug('trying to set %d as DONE', local_item._part.syncId)
+                    remote_item.markAsDone(local_item._part.syncId, self._plex.server)
+                    local_item.metadata['reported'] = True
+                    self._logger.debug('%d was marked downloaded successfuly!', local_item._part.syncId)
+                except Exception as e:
+                    self._logger.error('failed to mark %d as downloaded..', local_item._part.syncId)
+                    self._logger.exception(e)
+                finally:
+                    local_item.save()
+                    self._logger.info('moving on..')
+
+        return tuple([local_item for remote_item, local_item in recents])
 
     def _schedule_sync_request(self, seconds):
         """
