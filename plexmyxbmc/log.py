@@ -2,7 +2,7 @@ import logging
 
 
 def get_logger(name, _force=False):
-    name = '%-30s' % name
+    name = '%-20s' % name
     logger = logging.getLogger(name)
     logger.setLevel(logging.DEBUG)
     if (0 == len(logger.handlers)) or (_force is True):

@@ -10,8 +10,7 @@ class MyPlexServer(object):
         self._server = myplex_server
         self.friendlyName = self._server.name
         self.name = self._server.name
-        lname = '%s-%s' % (self.__class__.__name__, self._server.name)
-        self._logger = get_logger(lname)
+        self._logger = get_logger(self._server.name)
 
     def connect_local(self):
         server = self._server

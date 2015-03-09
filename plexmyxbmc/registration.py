@@ -63,7 +63,7 @@ class ClientRegistration(threading.Thread):
         self.sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 255)
         self.sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP,
                              socket.inet_aton(self.multicast_addr) + socket.inet_aton('0.0.0.0'))
-        self.sock.settimeout(5)
+        self.sock.settimeout(15)
         try:
             self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         except:
@@ -94,15 +94,16 @@ class ClientRegistration(threading.Thread):
         try:
             self.sock.bind(('0.0.0.0', self.update_port))
         except socket.error as e:
-            self.warn('Client Registration: Failed to bind to port %d (%s)', self.update_port, str(e))
+            self._logger.warn('Client Registration: Failed to bind to port %d (%s)', self.update_port, str(e))
             return
 
         self._keep_running = True
-        self._send_hello()
         while self._keep_running is True:
             data, addr = '', tuple()
             try:
+                self._send_hello()
                 data, addr = self.sock.recvfrom(1024)
+                time.sleep(15)
             except socket.timeout:
                 continue
             except KeyboardInterrupt:
